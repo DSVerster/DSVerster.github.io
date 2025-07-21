@@ -1,0 +1,12 @@
+.HEADERcircle-image
+{
+    width : 17vw;
+    height : 17vw;
+    object-fit: cover;
+    max-width: 90vw;
+    border-radius: 50%;
+}
+
+.HEADERtable {
+  border-spacing: 50vw; 
+}
