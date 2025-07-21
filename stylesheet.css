@@ -3,7 +3,7 @@
     justify-content: justify; /* Center horizontally */
     align-items: flex-start; /* Align to top */
     border-collapse: separate;     /* MUST use this — default is 'collapse' */
-    border-spacing: 25vw 10vw;   
+    border-spacing: 25vw 3vw;   
 }
 
 .HEADERcircle-image{
