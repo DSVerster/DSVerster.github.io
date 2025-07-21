@@ -1,17 +1,31 @@
-.HEADERtable {
+.HEADERtable{
     display: flex;
     justify-content: center; /* Center horizontally */
     align-items: flex-start; /* Align to top */
     min-height: 20vh;       /* Full viewport height (optional for layout) */
     padding-top: 20px;
     border-collapse: separate;     /* MUST use this — default is 'collapse' */
-    border-spacing: 400px 10px;   
+    border-spacing: 10vw 10vw;   
 }
 
 .HEADERcircle-image{
+    display: flex;
     width : 15vw;
     height : 15vw;
     object-fit: cover;
     max-width: 50vw;
     border-radius: 50%;
+}
+
+.ContactSection{
+    position: fixed;
+    bottom: 20vw;             
+    right: 20vw;              
+    background: #c2bdbd;
+    color: rgb(63, 62, 62);
+    padding: 15px 20vw;
+    border-radius: 20vw;
+    display: flex;
+    gap: 15vw;
+    align-items: center;
 }
