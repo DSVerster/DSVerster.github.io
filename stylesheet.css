@@ -1,12 +1,17 @@
-.HEADERcircle-image
-{
-    width : 17vw;
-    height : 17vw;
-    object-fit: cover;
-    max-width: 90vw;
-    border-radius: 50%;
+.HEADERtable {
+    display: flex;
+    justify-content: center; /* Center horizontally */
+    align-items: flex-start; /* Align to top */
+    min-height: 20vh;       /* Full viewport height (optional for layout) */
+    padding-top: 20px;
+    border-collapse: separate;     /* MUST use this — default is 'collapse' */
+    border-spacing: 400px 10px;   
 }
 
-.HEADERtable {
-  border-spacing: 50vw; 
+.HEADERcircle-image{
+    width : 15vw;
+    height : 15vw;
+    object-fit: cover;
+    max-width: 50vw;
+    border-radius: 50%;
 }
