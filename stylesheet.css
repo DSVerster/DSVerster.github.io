@@ -3,7 +3,10 @@
     justify-content: justify; /* Center horizontally */
     align-items: flex-start; /* Align to top */
     border-collapse: separate;     /* MUST use this — default is 'collapse' */
-    border-spacing: 25vw 3vw;   
+    border-spacing: 25vw 1vw;   
+    background: #3897e6;
+    /*background-image: url('media/Forest.jpg');*/
+    color: white;
 }
 
 .HEADERcircle-image{
@@ -14,6 +17,31 @@
     max-width: 50vw;
     border-radius: 50%;
     align-items: center;
+}
+
+.STDtable {
+  width: 80%;
+  margin: 40px auto; /* centers the table */
+  border-collapse: separate;
+  border-spacing: 0; /* so we can style borders cleanly */
+  table-layout: fixed; /* makes columns equal width */
+}
+
+.STDtable th, .STDtable td {
+  text-align: justify;
+  vertical-align: top;
+}
+
+/* Headings */
+.STDtable th {
+  font-size: 1.2em;
+  text-align: center;
+  border-bottom: 2px solid #ccc;
+}
+
+/* Vertical dividers ONLY between data columns, not headers */
+.STDtable td:not(:last-child) {
+  border-right: 2px solid #ccc;
 }
 
 .DownloadCV{
