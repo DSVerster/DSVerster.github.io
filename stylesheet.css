@@ -1,13 +1,10 @@
 body {
-  margin: 0;
-  padding: 0;
+  margin: 5;
+  padding: 5;
   background: linear-gradient(to bottom, #3897e6 0%, #3897e6 25%, white 100%);
   min-height: 100vh;
   font-family: sans-serif;
 }
-
-
-
 
 .HEADERbox{
     display: flex;
