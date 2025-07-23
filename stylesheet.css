@@ -6,7 +6,7 @@ body {
   font-family: sans-serif;
 }
 
-.HEADERbox{
+.HEADERbox {
     display: flex;
     justify-content: center; /* Center horizontally */
     align-items: flex-start; /* Align to top */
@@ -17,13 +17,12 @@ body {
     color: white;
 }
 
-.HEADERcircle-image{
+.HEADERcircle-image {
     display: flex;
     width : 20vw;
     height : 20vw;
     object-fit: cover;
-    max-width: 50vw;
-    border-radius: 50%;
+    border-radius: 45%;
     align-items: center;
 }
 
@@ -84,7 +83,7 @@ body {
   color: green;
 }
 
-.DownloadCV{
+.DownloadCV {
     background: #ffffff;
     color: rgb(0, 0, 0);
     padding: 10px 10px;
@@ -93,16 +92,33 @@ body {
     align-items: right;
 }
 
-.ContactSection{
+.ContactSection {
     position: fixed;
     bottom: 20px;             
     right: 20px;              
-    background: #ffffff;
     color: rgb(0, 0, 0);
-    padding: 15px 20px;
+    padding: 10px 15px;
     border-radius: 20px;
     display: flex;
-    gap: 15px;
+    gap: 20px;
     align-items: center;
+    justify-content: center;
     background: linear-gradient(to bottom right, #ffffff 0%, #ffffff 25%, #5d6d7a 100%);
+}
+
+.SocialIcon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  transition: transform 0.2s;
+}
+
+.SocialIcon:hover {
+  transform: scale(1.1);
+}
+
+.STDIcon {
+  width: 70px;
+  height: 70px;
+  object-fit: contain;
 }
