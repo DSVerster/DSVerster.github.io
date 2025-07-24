@@ -92,7 +92,7 @@ body {
     align-items: right;
 }
 
-.ContactSection {
+.SocialSection {
     position: fixed;
     bottom: 20px;             
     right: 20px;              
@@ -103,7 +103,7 @@ body {
     gap: 20px;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(to bottom right, #ffffff 0%, #ffffff 25%, #5d6d7a 100%);
+    background: linear-gradient(to bottom right, #ffffff 0%, #ffffff 25%, #6bade2 100%);
 }
 
 .SocialIcon {
@@ -121,4 +121,15 @@ body {
   width: 70px;
   height: 70px;
   object-fit: contain;
+}
+
+.ContactSection {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.ContactButton {
+  display: inline-block;
+  padding: 2px 20px;
+  border-radius: 5px;
 }
