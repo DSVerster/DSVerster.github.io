@@ -6,3 +6,4 @@ I am required to develop a comprehensive personal portfolio aimed at enhancing m
 ## Built with
     - CSS
     - HTML
+    - JavaScript
