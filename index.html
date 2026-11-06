@@ -1,104 +1,61 @@
-<html>
-    <title>Denzel Verster Cirriculum Vitae</title>
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Curriculum Vitae and portfolio of Denzel Stockenström Verster, Information Technology graduate.">
+    <meta name="theme-color" content="#000000">
+    <meta property="og:title" content="Denzel Verster | Curriculum Vitae">
+    <meta property="og:description" content="Information Technology graduate and Computer Science Honours student. My CV, projects and certificates.">
+    <meta property="og:type" content="website">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%BB%3C/text%3E%3C/svg%3E">
+    <title>Denzel Verster | Curriculum Vitae</title>
+    <link rel="stylesheet" href="stylesheet.css">
+</head>
+<body>
+    <header class="titlebar">
+        <button id="menuBtn" class="iconbtn" aria-label="Toggle explorer" aria-expanded="false">&#9776;</button>
+        <span class="title">Denzel Verster &mdash; Curriculum Vitae</span>
+    </header>
 
-    <head>
-        <link rel="stylesheet" href="stylesheet.css">
-    </head>
+    <div class="workbench">
+        <nav class="activity" aria-label="Primary">
+            <button id="explorerBtn" class="iconbtn active" aria-label="Explorer" title="Explorer">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+            </button>
+            <a class="iconbtn" href="https://github.com/DSVerster" target="_blank" rel="noopener noreferrer" aria-label="GitHub profile" title="GitHub">
+                <img src="media/github.png" alt="" width="22" height="22">
+            </a>
+            <a class="iconbtn" href="https://www.linkedin.com/in/denzel-verster-642373375/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn profile" title="LinkedIn">
+                <img src="media/linkedin.png" alt="" width="22" height="22">
+            </a>
+            <a class="iconbtn" href="media/Denzel-Verster-CV.pdf" download aria-label="Download CV (PDF)" title="Download CV (PDF)">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 4v12m0 0l-4-4m4 4l4-4M5 20h14"/></svg>
+            </a>
+        </nav>
 
-    <body>
-        <table class="HEADERbox"> 
-            <td>
-                <p><font size =22><b>Curriculum Vitae</b></font></p>
-                <p><font size =8><b>Denzel Stockenström Verster</b></font></p>
-            </td>
-            <td>
-                <img src="media/CirriculumVitae_Me.jpg" alt="Oh no! The image is missing." class="HEADERcircle-image">
-                <div class="DownloadCV">
-                    <a href="media/DS Verster Cirriculum-Vitae.pdf"> Download my CV (.pdf)</a>
-                </div>
-            </td>
-        </table>
+        <aside class="explorer" id="explorer" aria-label="Explorer">
+            <h2>Explorer</h2>
+            <div id="tree" role="tree"></div>
+        </aside>
+        <div class="scrim" id="scrim"></div>
 
-        <hr/>
+        <main class="editor">
+            <div class="tabs" id="tabs" role="tablist"></div>
+            <div class="crumbs" id="crumbs"></div>
+            <div class="pane" id="pane" tabindex="0"></div>
+        </main>
+    </div>
 
-        <h1>About me</h1>
-        <p>Motivated Information Technology student with a strong passion for programming, computer hardware, and hands-on projects like Raspberry Pi systems. Skilled in multi-language coding, networking, and problem-solving. Eager to apply technical knowledge in real-world environments and grow through continuous learning and collaboration.</p>
+    <footer class="status">
+        <span>&#9095; main</span>
+        <span class="grow" id="statusRepos">Loading repositories&hellip;</span>
+        <span class="hide-sm">UK English</span>
+        <span class="hide-sm">UTF-8</span>
+        <span>High Contrast</span>
+    </footer>
 
-        <table class="STDtable">
-            <thead>
-                <tr>
-                    <th>Education</th>
-                    <th>Experience</th>
-                    <th>Skills</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>
-                        <ul>
-                        <li><a href="https://www.nwu.ac.za/"><img src="media/NWU-Logo-SWIcon.png" alt="Oh no! The image is missing for NWU." class="STDIcon"><br>North-West University</a><br>Information Technology · (2023 - 2025)</li>   
-                        </ul>
-                    </td>
-                    <td>
-                        <ul>
-                            <li><a href="https://citeq.co.za/"><img src="media/CiteQ-Web-Logo-TransIcon.png " alt="Oh no! The image is missing for CiteQ Computers." class="STDIcon"><br>Cite Q Computers pty</a><br>Student Intern<br>July 2024 - July 2024 (1 month)</li>
-                        </ul>
-                    </td>
-                    <td>
-                        <ul>
-                        <li>Time Management</li>
-                        <li>Teamwork</li>
-                        <li>Micrsoft Word, Excel, SQL Server</li>
-                        <li>Cybersecurity</li>
-                        <li>Computer Repair, Maintenance, Networking</li>
-                        <li>Programmming</li>
-                        <li>Database Management</li>
-                        <li>Web development</li>
-                        </ul>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-
-        <div class="languageSection">
-            <div class="languageBox">
-                <h3>Spoken Languages</h3>
-                <ul>
-                    <li>English (Fluent)</li>
-                    <li>Afrikaans (Fluent)</li>
-                    <li>German (Basic)</li>
-                </ul>
-            </div>
-            <div class="languageBox">
-                <h3>Programming Languages</h3>
-                <ul>
-                    <li>Python</li>
-                    <li>Java</li>
-                    <li>C++ & C#</li>
-                    <li>HTML & CSS</li>
-                    <li>Delphi</li>
-                    <li>SQL</li>
-                </ul>
-                </div>
-        </div>
-
-        <div class="SocialSection">
-            <span>My Socials:</span>
-            <a href="https://www.linkedin.com/in/denzel-verster-642373375 " target="_blank" rel="noopener noreferrer"> <img src="media/linkedin.png" alt="Oh no! The image is missing for LinkedIn." class="SocialIcon"></a>
-            <a href="https://github.com/DSVerster" target="_blank" rel="noopener noreferrer"> <img src="media/github.png" alt="Oh no! The image is missing for Github." class="SocialIcon"></a>
-        </div>
-
-        <section class="ProjectSection">
-            <h3>My Github repositories:</h3>
-            <ul id="ProjectList"></ul>
-        </section>
-
-        <section class="ContactSection">
-            <h3>If you're interested in working with me, feel free to reach out:</h3>
-            <p>Email:</p>
-            <a href="mailto:denzelverster@gmail.com" class="ContactButton">denzelverster@gmail.com</a>
-        </section>
-
-        <script src="Jscript.js" defer></script>
-    </body>
+    <noscript><p style="padding:1rem">Please enable JavaScript to view this portfolio, or download the CV (PDF) instead.</p></noscript>
+    <script src="Jscript.js" defer></script>
+</body>
 </html>
