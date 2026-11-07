@@ -13,6 +13,7 @@
   --mono: "Cascadia Code", Consolas, "SFMono-Regular", Menlo, monospace;
   --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --ease: cubic-bezier(.4, 0, .2, 1);
+  --explorer-w: 270px;
 }
 
 * { box-sizing: border-box; }
@@ -50,10 +51,10 @@ a:hover { color: var(--teal); }
 
 /* Explorer */
 .explorer {
-  width: 270px; flex: none; overflow: auto; border-right: 1px solid var(--border);
-  transition: margin-left .25s var(--ease), transform .25s var(--ease);
+  width: var(--explorer-w); flex: none; overflow: auto; border-right: 1px solid var(--border);
+  transition: margin-left .25s var(--ease), transform .25s var(--ease), visibility 0s;
 }
-.explorer.collapsed { margin-left: -301px; }
+.explorer.collapsed { margin-left: calc(-1 * var(--explorer-w)); visibility: hidden; transition: margin-left .25s var(--ease), visibility 0s .25s; }
 .explorer h2 { margin: 0; padding: 10px 16px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
 .node { display: flex; align-items: center; gap: 6px; width: 100%; padding: 3px 8px 3px calc(8px + var(--d, 0) * 14px); background: none; border: 0; color: var(--fg); font: inherit; font-size: 15px; text-align: left; cursor: pointer; white-space: nowrap; }
 .node:hover { background: #1c1c1c; }
@@ -115,7 +116,7 @@ a:hover { color: var(--teal); }
 @media (max-width: 768px) {
   .titlebar { display: flex; }
   .explorer { position: absolute; top: 0; bottom: 0; left: 48px; z-index: 5; width: min(80vw, 300px); background: #000; margin-left: 0; transform: translateX(-130%); }
-  .explorer.collapsed { margin-left: 0; }
+  .explorer.collapsed { margin-left: 0; visibility: visible; }
   .explorer.mobile-open { transform: none; }
   .scrim.show { display: block; position: absolute; inset: 0; z-index: 4; background: rgba(0, 0, 0, .7); }
   .hide-sm { display: none; }
@@ -156,4 +157,58 @@ a:hover { color: var(--teal); }
   .cert-row { grid-template-columns: 1fr auto; gap: 4px 12px; }
   .cert-title { grid-column: 1 / -1; }
   .cert-group summary { flex-wrap: wrap; }
+}
+
+/* ==========================================================================
+   Motion (calm, sparing). All of it is switched off for reduced-motion users.
+   ========================================================================== */
+:root { interpolate-size: allow-keywords; --orbit-time: 15s; } /* time for one full lap of the dots: change this value only */
+
+/* 1. Two dots orbiting the border of an interactive card, clockwise and opposite each other */
+.card:not(.static) { position: relative; }
+.card:not(.static)::before,
+.card:not(.static)::after {
+  content: ""; position: absolute; top: 0; left: 0; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--border); box-shadow: 0 0 8px 1px var(--border);
+  offset-path: inset(0); offset-rotate: 0deg; offset-distance: 0%;
+  opacity: 0; pointer-events: none; transition: opacity .35s var(--ease);
+}
+.card:not(.static):hover::before,
+.card:not(.static):hover::after,
+.card:not(.static):focus-visible::before,
+.card:not(.static):focus-visible::after {
+  opacity: 1; animation: orbit var(--orbit-time) linear infinite;
+}
+.card:not(.static):hover::after,
+.card:not(.static):focus-visible::after { animation-delay: calc(var(--orbit-time) / -2); } /* always half a lap behind */
+@keyframes orbit { to { offset-distance: 100%; } }
+@supports not (offset-path: inset(0)) { .card::before, .card::after { display: none; } }
+
+/* 2. Cards rise gently into place when a page opens (first eight only) */
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.facts > .card { animation: rise .45s var(--ease) both; }
+.facts > .card:nth-child(2) { animation-delay: .05s; }
+.facts > .card:nth-child(3) { animation-delay: .10s; }
+.facts > .card:nth-child(4) { animation-delay: .15s; }
+.facts > .card:nth-child(5) { animation-delay: .20s; }
+.facts > .card:nth-child(6) { animation-delay: .25s; }
+.facts > .card:nth-child(7) { animation-delay: .30s; }
+.facts > .card:nth-child(n+8) { animation-delay: .35s; }
+
+/* 3. Small, quiet responses to the cursor */
+.tab { transition: color .2s var(--ease), box-shadow .25s var(--ease), background .2s var(--ease); }
+.tab:hover { color: var(--fg); background: #0d0d0d; }
+.node .label { transition: transform .2s var(--ease); }
+.node:hover .label { transform: translateX(3px); }
+.chips li { transition: border-color .2s var(--ease), color .2s var(--ease); }
+.chips li:hover { border-color: var(--border); color: var(--fn); }
+.hero img { transition: transform .4s var(--ease), border-color .3s var(--ease); }
+.hero img:hover { transform: scale(1.03); border-color: var(--teal); }
+
+/* 4. Certificate groups open and close smoothly (progressive enhancement) */
+.cert-group::details-content { block-size: 0; overflow: hidden; transition: block-size .3s var(--ease), content-visibility .3s var(--ease) allow-discrete; }
+.cert-group[open]::details-content { block-size: auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  .card::before, .card::after { display: none; }
 }

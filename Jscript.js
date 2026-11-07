@@ -99,6 +99,7 @@ const DATA = {
     return m; /* providers appear in order of their newest certificate */
   };
   const certHref = c => encodeURI(c.file);
+  const repoDay = iso => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
   /* ---------- Views ---------- */
@@ -144,17 +145,18 @@ const DATA = {
     ${list.length ? `<div class="facts">${list.map(e => `<button class="card" data-open="${folder}/${esc(e.id)}"><strong>${esc(e.title)}</strong><small>${esc(e.org)}</small><small>${esc(e.period)}</small></button>`).join("")}</div>`
       : `<p class="placeholder">${emptyText}</p>`}`;
 
-  const repoCards = (limit) => {
+  const repoCards = (limit, compact) => {
     if (state.reposStatus === "loading") return `<p class="placeholder">Loading repositories from GitHub&hellip;</p>`;
     if (state.reposStatus === "error") return `<p class="placeholder">The repositories could not be loaded at this time. Please view them directly on <a href="https://github.com/${DATA.githubUser}?tab=repositories" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>`;
     if (!state.repos.length) return `<p class="placeholder">No public repositories are available yet.</p>`;
-    return `<div class="facts">${state.repos.slice(0, limit || 999).map(r => `<button class="card" data-open="projects/${esc(r.name)}"><strong>${esc(r.name)}</strong><small>${esc(r.language || "Mixed")}</small><p>${esc(r.description || "Description to be added.")}</p></button>`).join("")}</div>`;
+    return `<div class="facts">${state.repos.slice(0, limit || 999).map(r => `<button class="card" data-open="projects/${esc(r.name)}"><strong>${esc(r.name)}</strong><small>${esc(r.language || "Mixed")}</small><small>Created ${esc(repoDay(r.created_at))}</small><small>Updated ${esc(repoDay(r.pushed_at))}</small>${compact
+      ? ""
+      : `<p>${esc(r.description || "Description to be added.")}</p>`}</button>`).join("")}</div>`;
   };
 
   const staticCards = list => `<div class="facts wide">${list.map(e => `<div class="card static"><strong>${esc(e.title)}</strong><small>${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">${esc(e.org)}</a>` : esc(e.org)}</small><small>${esc(e.period)}</small><ul class="plain">${(e.details || []).map(d => `<li>${esc(d)}</li>`).join("")}</ul></div>`).join("")}</div>`;
   const skillsHtml = () => Object.entries(DATA.skills).map(([k, v]) => `<h3>${esc(k)}</h3><ul class="chips">${v.map(s => `<li>${esc(s)}</li>`).join("")}</ul>`).join("");
   const contactBlock = () => `<div class="contact-card" id="contact-card"><p class="meta">Email address</p><p class="email">${esc(DATA.email)}</p>
-      <a class="btn" href="mailto:${esc(DATA.email)}">Send an email</a><button class="btn" data-copy="${esc(DATA.email)}">Copy address</button>
       <a class="btn" href="${esc(DATA.linkedin)}" target="_blank" rel="noopener noreferrer">LinkedIn</a>
       <a class="btn" href="https://github.com/${DATA.githubUser}" target="_blank" rel="noopener noreferrer">GitHub</a></div>`;
 
@@ -175,7 +177,7 @@ const DATA = {
       <h2>Education</h2>${staticCards(DATA.education)}
       <h2>Experience</h2>${DATA.experience.length ? staticCards(DATA.experience) : '<p class="placeholder">I will add further experience here as I gain it.</p>'}
       <h2>Skills and languages</h2>${skillsHtml()}
-      <h2>Projects</h2>${repoCards(6)}
+      <h2>Projects</h2>${repoCards(6, true)}
       ${state.repos.length > 6 ? '<p><button class="btn" data-open="projects">View all projects</button></p>' : ""}
       <h2>Certificates</h2>${aboutCerts()}
       <h2>Contact</h2>${contactBlock()}`,
@@ -193,7 +195,7 @@ const DATA = {
     if (!child) return views[folder] ? { title: { about: "About.md", skills: "Skills.json", contact: "Contact.md" }[folder] || folder, html: views[folder]() } : null;
     if (folder === "projects") {
       const r = state.repos.find(x => x.name === child);
-      return r ? { title: r.name, html: `<h1>${esc(r.name)}</h1><p class="meta">${esc(r.language || "Mixed")} &middot; Updated ${new Date(r.pushed_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
+      return r ? { title: r.name, html: `<h1>${esc(r.name)}</h1><p class="meta">${esc(r.language || "Mixed")} &middot; Created ${repoDay(r.created_at)} &middot; Updated ${repoDay(r.pushed_at)}</p>
         <p>${esc(r.description || "Description to be added.")}</p>
         <a class="btn" href="${esc(r.html_url)}" target="_blank" rel="noopener noreferrer">View repository</a>
         ${r.homepage ? `<a class="btn" href="${esc(r.homepage)}" target="_blank" rel="noopener noreferrer">Live demonstration</a>` : ""}` } : null;
