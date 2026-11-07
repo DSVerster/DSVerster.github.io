@@ -157,6 +157,7 @@ const DATA = {
   const staticCards = list => `<div class="facts wide">${list.map(e => `<div class="card static"><strong>${esc(e.title)}</strong><small>${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">${esc(e.org)}</a>` : esc(e.org)}</small><small>${esc(e.period)}</small><ul class="plain">${(e.details || []).map(d => `<li>${esc(d)}</li>`).join("")}</ul></div>`).join("")}</div>`;
   const skillsHtml = () => Object.entries(DATA.skills).map(([k, v]) => `<h3>${esc(k)}</h3><ul class="chips">${v.map(s => `<li>${esc(s)}</li>`).join("")}</ul>`).join("");
   const contactBlock = () => `<div class="contact-card" id="contact-card"><p class="meta">Email address</p><p class="email">${esc(DATA.email)}</p>
+      <button class="btn" data-copy="${esc(DATA.email)}">Copy address</button>
       <a class="btn" href="${esc(DATA.linkedin)}" target="_blank" rel="noopener noreferrer">LinkedIn</a>
       <a class="btn" href="https://github.com/${DATA.githubUser}" target="_blank" rel="noopener noreferrer">GitHub</a></div>`;
 
