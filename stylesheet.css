@@ -129,7 +129,7 @@ a:hover { color: var(--teal); }
 .pane h3 { margin: 1.2em 0 .5em; font-size: 1rem; font-weight: 600; color: var(--fn); }
 .facts.wide { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
 .card.static { cursor: default; }
-.card.static:hover { transform: none; border-color: var(--soft); }
+.card.static:hover { transform: none; border-color: var(--border); }
 .card.static ul { margin: 8px 0 0; font-size: 15px; }
 .contact-card { max-width: 640px; padding: 20px; border: 1px solid var(--border); }
 .contact-card .email { margin: 0 0 10px; font-family: var(--mono); font-size: 1.15rem; color: var(--string); word-break: break-all; user-select: all; }
@@ -162,27 +162,34 @@ a:hover { color: var(--teal); }
 /* ==========================================================================
    Motion (calm, sparing). All of it is switched off for reduced-motion users.
    ========================================================================== */
-:root { interpolate-size: allow-keywords; --orbit-time: 15s; } /* time for one full lap of the dots: change this value only */
+:root {
+  interpolate-size: allow-keywords;
+  --orbit-time: 15s;               /* ANIMATION SPEED 1: time for the two dots to complete one lap of a box */
+  --graph-time: 3.3s; /* ANIMATION SPEED 2: time for the activity graph to draw itself. It follows the orbit (Also like 3.3v :) )
+                                      speed by default; replace "var(--orbit-time)" with your own value (for example 6s)
+                                      to set it independently. */
+}
 
-/* 1. Two dots orbiting the border of an interactive card, clockwise and opposite each other */
-.card:not(.static) { position: relative; }
-.card:not(.static)::before,
-.card:not(.static)::after {
+/* 1. Two dots orbiting the border of any box on hover, clockwise and opposite each other.
+      To give another kind of box the same effect, add its class to the lists below (three places). */
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder) { position: relative; transition: border-color .2s var(--ease), transform .2s var(--ease); }
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder)::before,
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder)::after {
   content: ""; position: absolute; top: 0; left: 0; width: 6px; height: 6px; border-radius: 50%;
   background: var(--border); box-shadow: 0 0 8px 1px var(--border);
   offset-path: inset(0); offset-rotate: 0deg; offset-distance: 0%;
   opacity: 0; pointer-events: none; transition: opacity .35s var(--ease);
 }
-.card:not(.static):hover::before,
-.card:not(.static):hover::after,
-.card:not(.static):focus-visible::before,
-.card:not(.static):focus-visible::after {
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder):hover::before,
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder):hover::after,
+.card:focus-visible::before, .card:focus-visible::after {
   opacity: 1; animation: orbit var(--orbit-time) linear infinite;
 }
-.card:not(.static):hover::after,
-.card:not(.static):focus-visible::after { animation-delay: calc(var(--orbit-time) / -2); } /* always half a lap behind */
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder):hover::after,
+.card:focus-visible::after { animation-delay: calc(var(--orbit-time) / -2); } /* always half a lap behind */
+:is(.activity-card, .cert-group, .placeholder):hover { border-color: var(--border); }
 @keyframes orbit { to { offset-distance: 100%; } }
-@supports not (offset-path: inset(0)) { .card::before, .card::after { display: none; } }
+@supports not (offset-path: inset(0)) { .card::before, .card::after, .contact-card::before, .contact-card::after, .activity-card::before, .activity-card::after, .cert-group::before, .cert-group::after, .placeholder::before, .placeholder::after { display: none; } }
 
 /* 2. Cards rise gently into place when a page opens (first eight only) */
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -210,5 +217,43 @@ a:hover { color: var(--teal); }
 .cert-group[open]::details-content { block-size: auto; }
 
 @media (prefers-reduced-motion: reduce) {
-  .card::before, .card::after { display: none; }
+  .card::before, .card::after, .contact-card::before, .contact-card::after, .activity-card::before, .activity-card::after,
+  .cert-group::before, .cert-group::after, .placeholder::before, .placeholder::after { display: none; }
 }
+
+/* ==========================================================================
+   About page: two columns when there is room, with the activity graph beside the text
+   ========================================================================== */
+.pane { container-type: inline-size; container-name: pane; }
+.about-grid { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "intro" "side" "rest"; column-gap: 40px; }
+.about-intro { grid-area: intro; }
+.about-side { grid-area: side; }
+.about-rest { grid-area: rest; }
+@container pane (min-width: 980px) {
+  .about-grid { grid-template-columns: minmax(0, 1fr) minmax(380px, 42%); grid-template-areas: "intro side" "rest rest"; align-items: start; }
+  .about-side h2 { margin-top: .4em; }
+  .about-side .activity-card { max-width: none; }
+}
+/* Portrait screens (taller than wide) save the space: no graph is shown or loaded */
+@media (orientation: portrait) { .about-side { display: none; } }
+
+.activity-card { padding: 14px 16px 12px; border: 1px solid var(--soft); max-width: 620px; }
+.activity-card > .meta { margin: 0 0 6px; text-align: right; }
+.activity-card .placeholder { margin: 8px 0; }
+.chart { display: block; width: 100%; height: auto; }
+.chart text { fill: var(--dim); font: 11px var(--sans); }
+.chart .grid { stroke: var(--soft); stroke-width: 1; stroke-dasharray: 3 4; }
+.chart .axis { stroke: var(--dim); stroke-width: 1; }
+.chart .line { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 0; animation: draw var(--graph-time) linear both; }
+.chart .dot { fill: var(--bg); stroke-width: 2; animation: pop .35s var(--ease) both; animation-delay: calc(var(--graph-time) * var(--f, 0)); } /* each point appears as the line reaches it */
+.chart .s-a { stroke: var(--teal); }
+.chart .s-b { stroke: var(--blue); }
+@keyframes draw { from { stroke-dashoffset: 1; } }
+@keyframes pop { from { opacity: 0; } }
+.legend { display: flex; justify-content: center; gap: 20px; margin: 4px 0 0; padding: 0; list-style: none; font-size: 14.5px; }
+.legend li { display: flex; align-items: center; gap: 8px; max-width: none; }
+.sw { position: relative; width: 18px; height: 2px; }
+.sw::after { content: ""; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; transform: translate(-50%, -50%); border: 2px solid currentColor; border-radius: 50%; background: var(--bg); }
+.sw.a { background: var(--teal); color: var(--teal); }
+.sw.b { background: var(--blue); color: var(--blue); }
+.activity-card .note { margin: 8px 0 0; text-align: center; }

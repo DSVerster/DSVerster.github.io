@@ -10,6 +10,12 @@ const DATA = {
   name: "Denzel Stockenström Verster",
   role: "BSc Information Technology Graduate | Honours Student in Computer Science and IT",
   githubUser: "DSVerster",
+  /* Activity graph: window in days (one point per day, maximum 90), how often a date label is shown, and the two lines
+     (first = green, second = blue). Choose any two of: "repos", "commits", "pushes", "branches", "created", "events". */
+  activity: { days: 30, labelEvery: 2, series: ["repos", "commits"] },
+
+  /* How many projects and certificates the About.md page shows before the "View all" button (use 0 to show none) */
+  aboutLimits: { projects: 6, certificates: 3 },
   email: "denzelverster@gmail.com",
   linkedin: "https://www.linkedin.com/in/denzel-verster-642373375/",
   cv: "media/DS Verster Cirriculum-Vitae.pdf",
@@ -37,37 +43,37 @@ const DATA = {
   certificates: [
     { id: "neo4j-genai-fundamentals", group: "Neo4j", org: "Neo4j GraphAcademy", type: "Certificate",
       title: "Neo4j & Generative AI Fundamentals", date: "2026-09-07",
-      file: "certificates/neo4j-generative-ai-fundamentals.pdf",
+      file: "certificates/Neo4j & GenerativeAI Fundamentals Certificate _ GraphAcademy.pdf",
       credentialId: "864b8c59-19a2-4bf5-9aab-4d3d9c9107a2",
       url: "",
       details: ["I completed all requirements of the Neo4j GraphAcademy Generative AI Fundamentals programme."] },
 
     { id: "data-analysis-in-matlab", group: "MathWorks", org: "MathWorks", type: "Learning path",
       title: "Data Analysis in MATLAB", date: "2026-01-28",
-      file: "certificates/matlab-data-analysis.pdf",
+      file: "certificates/MATLAB Data Analysis in MATLAB certificate.pdf",
       details: ["I completed this learning path, which covers preparing, analysing and summarising data in MATLAB."],
       courses: ["Tables", "Clean and Prepare Data for Analysis", "Common Data Analysis Techniques", "Find and Extract Subsets of Data", "Calculations on Grouped Data"] },
     { id: "core-matlab-skills", group: "MathWorks", org: "MathWorks", type: "Learning path",
       title: "Core MATLAB Skills", date: "2026-01-27",
-      file: "certificates/matlab-core-skills.pdf",
+      file: "certificates/MATLAB Core MATLAB Skills certificate.pdf",
       details: ["I completed this learning path, which covers the everyday foundations of working in MATLAB."],
       courses: ["MATLAB Desktop Tools and Troubleshooting Scripts", "Explore Data with MATLAB Plots", "Make and Manipulate Matrices", "Calculations with Vectors and Matrices"] },
     { id: "visualization-in-matlab", group: "MathWorks", org: "MathWorks", type: "Learning path",
       title: "Visualization in MATLAB", date: "2026-01-27",
-      file: "certificates/matlab-visualization.pdf",
+      file: "certificates/MATLAB Visualization in MATLAB certificate.pdf",
       details: ["I completed this learning path, which covers creating and customising plots and graphics in MATLAB."],
       courses: ["Explore Data with MATLAB Plots", "Plot Beyond the Second Dimension", "How MATLAB Graphics Work"] },
     { id: "matlab-app-building-onramp", group: "MathWorks", org: "MathWorks", type: "Course",
       title: "App Building Onramp", date: "2026-01-22",
-      file: "certificates/matlab-app-building-onramp.pdf",
+      file: "certificates/MATLAB App Building Onramp certificate.pdf",
       details: ["I completed this self-paced course (100%)."] },
     { id: "matlab-statistics-onramp", group: "MathWorks", org: "MathWorks", type: "Course",
       title: "Statistics Onramp", date: "2026-01-22",
-      file: "certificates/matlab-statistics-onramp.pdf",
+      file: "certificates/MATLAB Statistic Onramp certificate.pdf",
       details: ["I completed this self-paced course (100%)."] },
     { id: "matlab-onramp", group: "MathWorks", org: "MathWorks", type: "Course",
       title: "MATLAB Onramp", date: "2026-01-21",
-      file: "certificates/matlab-onramp.pdf",
+      file: "certificates/MATLAB Onramp certificate.pdf",
       details: ["I completed this self-paced introductory course (100%)."] }
     /* Template:
     , { id: "unique-id", group: "Provider", org: "Issuing organisation", type: "Course", title: "Certificate title", date: "YYYY-MM-DD",
@@ -88,7 +94,7 @@ const DATA = {
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const mobile = () => matchMedia("(max-width: 768px)").matches;
-  const state = { repos: [], reposStatus: "loading", open: new Set(["portfolio"]), tabs: [], active: null };
+  const state = { repos: [], reposStatus: "loading", open: new Set(["portfolio"]), tabs: [], active: null, activity: { status: "loading", buckets: [] } };
 
   /* ---------- Certificate helpers ---------- */
   const fmtDate = iso => new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -101,6 +107,135 @@ const DATA = {
   const certHref = c => encodeURI(c.file);
   const repoDay = iso => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+  /* ---------- Activity graph (public GitHub push events, per date) ---------- */
+  const dayStart = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const shortDate = d => d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  const rnd = n => Math.round(n * 10) / 10;
+
+  const METRICS = {
+    commits:  { name: "Commits",                one: "commit",       many: "commits" },
+    pushes:   { name: "Pushes",                 one: "push",         many: "pushes" },
+    repos:    { name: "Repositories worked on", one: "repository",   many: "repositories" },
+    branches: { name: "Branches pushed to",     one: "branch",       many: "branches" },
+    created:  { name: "Items created",          one: "item created", many: "items created" },
+    events:   { name: "All activity",           one: "event",        many: "events" }
+  };
+  const chosenSeries = () => {
+    const keys = (DATA.activity.series || []).filter(k => METRICS[k]);
+    return [...keys, "repos", "commits"].filter((k, i, a) => a.indexOf(k) === i).slice(0, 2)
+      .map((k, i) => ({ key: k, cls: i ? "s-b" : "s-a", ...METRICS[k] }));
+  };
+
+  function buildBuckets(events) {
+    const n = Math.max(2, DATA.activity.days);
+    const today = dayStart(new Date());
+    const buckets = Array.from({ length: n }, (_, i) => {
+      const day = addDays(today, -(n - 1 - i)); /* one bucket per day */
+      return { start: day, end: day, commits: 0, pushes: 0, created: 0, events: 0, repos: 0, branches: 0, _repos: new Set(), _branches: new Set() };
+    });
+    const allRepos = new Set();
+    events.forEach(ev => {
+      const d = dayStart(new Date(ev.created_at));
+      const b = buckets.find(x => +x.start === +d);
+      if (!b) return;
+      b.events += 1;
+      if (ev.type === "CreateEvent") b.created += 1;
+      if (ev.type !== "PushEvent") return;
+      const p = ev.payload || {};
+      b.pushes += 1;
+      b.commits += p.distinct_size ?? p.size ?? 1;
+      if (ev.repo) { b._repos.add(ev.repo); allRepos.add(ev.repo); b._branches.add(ev.repo + "#" + (p.ref || "")); }
+    });
+    buckets.forEach(b => { b.repos = b._repos.size; b.branches = b._branches.size; });
+    buckets.repoCount = allRepos.size;
+    return buckets;
+  }
+
+  /* Monotone cubic curve: smooth, but never dips below zero or overshoots a peak */
+  function smoothPath(pts) {
+    const n = pts.length, dx = [], m = [], t = new Array(n);
+    for (let i = 0; i < n - 1; i++) { dx[i] = pts[i + 1][0] - pts[i][0]; m[i] = (pts[i + 1][1] - pts[i][1]) / dx[i]; }
+    t[0] = m[0]; t[n - 1] = m[n - 2];
+    for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+    for (let i = 0; i < n - 1; i++) {
+      if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+      const a = t[i] / m[i], b = t[i + 1] / m[i], h = Math.hypot(a, b);
+      if (h > 3) { const k = 3 / h; t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
+    }
+    let d = `M${rnd(pts[0][0])},${rnd(pts[0][1])}`;
+    for (let i = 0; i < n - 1; i++) {
+      d += ` C${rnd(pts[i][0] + dx[i] / 3)},${rnd(pts[i][1] + t[i] * dx[i] / 3)} ${rnd(pts[i + 1][0] - dx[i] / 3)},${rnd(pts[i + 1][1] - t[i + 1] * dx[i] / 3)} ${rnd(pts[i + 1][0])},${rnd(pts[i + 1][1])}`;
+    }
+    return d;
+  }
+
+  /* A "nice" tick spacing (1, 2, 5, 10, 20, 50, 100, 200 ...) giving about four intervals at any scale */
+  function niceStep(maxV) {
+    const raw = maxV / 4, pow = Math.pow(10, Math.floor(Math.log10(raw)));
+    return [1, 2, 5, 10].map(m => m * pow).find(u => u >= raw);
+  }
+
+  function chartSvg(b) {
+    const ser = chosenSeries();
+    const maxV = Math.max(4, ...b.flatMap(x => ser.map(s => x[s.key])));
+    const unit = niceStep(maxV);
+    const yMax = Math.ceil(maxV / unit) * unit;          /* the vertical scale fits the busiest day */
+    const W = 400, H = 250, T = 12, B = 40, R = 16;
+    const L = 16 + String(yMax).length * 6.5;             /* left margin grows with the size of the numbers */
+    const iw = W - L - R, ih = H - T - B;
+    const X = i => L + i * iw / (b.length - 1);
+    const Y = v => T + ih - (v / yMax) * ih;
+    const every = Math.max(1, DATA.activity.labelEvery || 2);
+    const labelled = i => (b.length - 1 - i) % every === 0; /* always includes today */
+    let g = "";
+    for (let v = 0; v <= yMax; v += unit) g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${rnd(Y(v))}" y2="${rnd(Y(v))}"/><text x="${L - 8}" y="${rnd(Y(v) + 4)}" text-anchor="end">${v}</text>`;
+    let prevMonth = -1;
+    b.forEach((x, i) => {
+      if (!labelled(i)) return;
+      const first = x.end.getMonth() !== prevMonth; prevMonth = x.end.getMonth();
+      g += `<line class="grid" x1="${rnd(X(i))}" x2="${rnd(X(i))}" y1="${T}" y2="${T + ih}"/><text x="${rnd(X(i))}" y="${T + ih + 16}" text-anchor="middle">${x.end.getDate()}</text>`;
+      if (first) g += `<text x="${rnd(X(i))}" y="${T + ih + 30}" text-anchor="middle">${esc(x.end.toLocaleDateString("en-GB", { month: "short" }))}</text>`;
+    });
+    g += `<line class="axis" x1="${L}" x2="${L}" y1="${T}" y2="${T + ih}"/><line class="axis" x1="${L}" x2="${W - R}" y1="${T + ih}" y2="${T + ih}"/>`;
+    const dotR = b.length > 20 ? 3 : 3.5;
+    /* No outlined points for the quiet days after the last real activity (the line itself still runs to today) */
+    const lastActive = b.reduce((last, x, i) => ser.some(s => x[s.key] > 0) ? i : last, -1);
+    ser.forEach(s => {
+      const pts = b.map((x, i) => [X(i), Y(x[s.key])]);
+      g += `<path class="line ${s.cls}" pathLength="1" d="${smoothPath(pts)}"/>`;
+      pts.forEach((p, i) => { if (i > lastActive) return; g += `<circle class="dot ${s.cls}" cx="${rnd(p[0])}" cy="${rnd(p[1])}" r="${dotR}" style="--f:${(i / (b.length - 1)).toFixed(3)}"><title>${esc(shortDate(b[i].end))}: ${plural(b[i][s.key], s.one, s.many)}</title></circle>`; });
+    });
+    const commits = b.reduce((a, x) => a + x.commits, 0), active = b.filter(x => x.pushes > 0).length;
+    const summary = active ? `${plural(commits, "commit", "commits")} across ${plural(b.repoCount || 0, "repository", "repositories")}, active on ${active} of ${b.length} days` : "No public activity in this period";
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Public GitHub activity: ${esc(summary)}">${g}</svg>
+      <ul class="legend">${ser.map(s => `<li><i class="sw ${s.cls === "s-a" ? "a" : "b"}"></i>${esc(s.name)}</li>`).join("")}</ul>
+      <p class="meta note">${esc(summary)}</p>
+      <table class="sr"><caption>Public GitHub activity by date</caption><tr><th>Date</th>${ser.map(s => `<th>${esc(s.name)}</th>`).join("")}</tr>${b.map(x => `<tr><td>${esc(shortDate(x.end))}</td>${ser.map(s => `<td>${x[s.key]}</td>`).join("")}</tr>`).join("")}</table>`;
+  }
+
+  const activityHtml = () => {
+    const a = state.activity, { days, labelEvery } = DATA.activity;
+    const sub = `<p class="meta">Last ${days} days &middot; one point per day, labelled every ${labelEvery} days</p>`;
+    if (a.status === "loading") return sub + `<p class="placeholder">Loading activity from GitHub&hellip;</p>`;
+    if (a.status === "error") return sub + `<p class="placeholder">My activity could not be loaded at this time. Please view it directly on <a href="https://github.com/${DATA.githubUser}" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>`;
+    return sub + chartSvg(a.buckets);
+  };
+
+  async function loadEvents() {
+    try { const c = JSON.parse(sessionStorage.getItem("dsv-events-v2")); if (c) return c; } catch (e) { /* no cache */ }
+    const out = [], cutoff = addDays(dayStart(new Date()), -DATA.activity.days);
+    for (let page = 1; page <= 3; page++) {
+      const r = await fetch(`https://api.github.com/users/${DATA.githubUser}/events/public?per_page=100&page=${page}`);
+      if (!r.ok) throw new Error(r.status);
+      const batch = await r.json();
+      out.push(...batch.map(e => ({ type: e.type, created_at: e.created_at, repo: e.repo && e.repo.name, payload: { size: e.payload && e.payload.size, distinct_size: e.payload && e.payload.distinct_size, ref: e.payload && e.payload.ref } })));
+      if (batch.length < 100 || new Date(batch[batch.length - 1].created_at) < cutoff) break;
+    }
+    try { sessionStorage.setItem("dsv-events-v2", JSON.stringify(out)); } catch (e) { /* storage unavailable */ }
+    return out;
+  }
 
   /* ---------- Views ---------- */
   const entryDetail = (e, kind) => `
@@ -149,7 +284,7 @@ const DATA = {
     if (state.reposStatus === "loading") return `<p class="placeholder">Loading repositories from GitHub&hellip;</p>`;
     if (state.reposStatus === "error") return `<p class="placeholder">The repositories could not be loaded at this time. Please view them directly on <a href="https://github.com/${DATA.githubUser}?tab=repositories" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>`;
     if (!state.repos.length) return `<p class="placeholder">No public repositories are available yet.</p>`;
-    return `<div class="facts">${state.repos.slice(0, limit || 999).map(r => `<button class="card" data-open="projects/${esc(r.name)}"><strong>${esc(r.name)}</strong><small>${esc(r.language || "Mixed")}</small><small>Created ${esc(repoDay(r.created_at))}</small><small>Updated ${esc(repoDay(r.pushed_at))}</small>${compact
+    return `<div class="facts">${state.repos.slice(0, limit ?? 999).map(r => `<button class="card" data-open="projects/${esc(r.name)}"><strong>${esc(r.name)}</strong><small>${esc(r.language || "Mixed")}</small><small>Created ${esc(repoDay(r.created_at))}</small><small>Updated ${esc(repoDay(r.pushed_at))}</small>${compact
       ? ""
       : `<p>${esc(r.description || "Description to be added.")}</p>`}</button>`).join("")}</div>`;
   };
@@ -164,24 +299,27 @@ const DATA = {
   const aboutCerts = () => {
     const n = DATA.certificates.length;
     if (!n) return '<p class="placeholder">My certificates will appear here as I earn them.</p>';
-    return `<div class="facts">${sortedCerts().slice(0, 3).map(c => `<button class="card" data-open="certificates/${esc(c.id)}"><strong>${esc(c.title)}</strong><small>${esc(c.org)}</small><small>${esc(fmtDate(c.date))}</small></button>`).join("")}</div>
-      ${n > 3 ? `<p><button class="btn" data-open="certificates">View all ${n} certificates</button></p>` : ""}`;
+    return `<div class="facts">${sortedCerts().slice(0, DATA.aboutLimits.certificates).map(c => `<button class="card" data-open="certificates/${esc(c.id)}"><strong>${esc(c.title)}</strong><small>${esc(c.org)}</small><small>${esc(fmtDate(c.date))}</small></button>`).join("")}</div>
+      ${n > DATA.aboutLimits.certificates ? `<p><button class="btn" data-open="certificates">View all ${n} certificates</button></p>` : ""}`;
   };
 
   const views = {
     about: () => `
+      <div class="about-grid"><div class="about-intro">
       <div class="hero"><img src="${esc(DATA.photo)}" alt="Portrait of ${esc(DATA.name)}">
         <div><h1>${esc(DATA.name)}</h1><p class="role">${esc(DATA.role)}</p>
         <a class="btn" href="${esc(DATA.cv)}" download>Download CV (PDF)</a>
         <button class="btn" data-scroll="contact-card">Contact me</button></div></div>
-      <h2>About me</h2><p>${esc(DATA.summary)}</p>
+      <h2>About me</h2><p>${esc(DATA.summary)}</p></div>
+      <aside class="about-side"><h2>Activity</h2><div class="activity-card" id="activity">${activityHtml()}</div></aside>
+      <div class="about-rest">
       <h2>Education</h2>${staticCards(DATA.education)}
       <h2>Experience</h2>${DATA.experience.length ? staticCards(DATA.experience) : '<p class="placeholder">I will add further experience here as I gain it.</p>'}
       <h2>Skills and languages</h2>${skillsHtml()}
-      <h2>Projects</h2>${repoCards(6, true)}
-      ${state.repos.length > 6 ? '<p><button class="btn" data-open="projects">View all projects</button></p>' : ""}
+      <h2>Projects</h2>${repoCards(DATA.aboutLimits.projects, true)}
+      ${state.repos.length > DATA.aboutLimits.projects ? '<p><button class="btn" data-open="projects">View all projects</button></p>' : ""}
       <h2>Certificates</h2>${aboutCerts()}
-      <h2>Contact</h2>${contactBlock()}`,
+      <h2>Contact</h2>${contactBlock()}</div></div>`,
     experience: () => overview("Experience", DATA.experience, "experience", "I will add further experience here as I gain it."),
     education: () => overview("Education", DATA.education, "education", "My education details will appear here."),
     certificates: certOverview,
@@ -358,4 +496,19 @@ const DATA = {
     })
     .catch(err => { console.error("GitHub API error:", err); state.reposStatus = "error"; $("#statusRepos").textContent = "GitHub repositories unavailable"; })
     .finally(() => { const s = location.hash.slice(1); if (s.startsWith("projects/") && !state.tabs.includes(s)) open(s); else render(); });
+
+  /* The graph updates in place, so the page does not jump when the data arrives */
+  /* Only for landscape screens (wider than tall); portrait screens skip the graph and its request */
+  const landscape = matchMedia("(orientation: landscape)");
+  let activityStarted = false;
+  function startActivity() {
+    if (activityStarted) return;
+    activityStarted = true;
+    loadEvents()
+      .then(ev => { state.activity = { status: "ok", buckets: buildBuckets(ev) }; })
+      .catch(err => { console.error("GitHub activity error:", err); state.activity.status = "error"; })
+      .finally(() => { const el = $("#activity"); if (el) el.innerHTML = activityHtml(); });
+  }
+  if (landscape.matches) startActivity();
+  landscape.addEventListener("change", e => { if (e.matches) startActivity(); });
 })();
