@@ -272,3 +272,20 @@ a:hover { color: var(--teal); }
 .chips li.jump:hover button { color: var(--fn); }
 .chips li.jump button:focus-visible { outline-offset: 0; }
 .cert-group { scroll-margin-top: 12px; }
+
+/* ==========================================================================
+   Languages per project: one stacked bar and a legend with every percentage
+   ========================================================================== */
+.langs { display: block; margin: 6px 0 4px; }
+.lang-fallback { display: block; color: var(--dim); font-size: .85rem; }
+.lang-bar { display: flex; gap: 2px; height: 8px; overflow: hidden; border-radius: 4px; background: var(--soft); animation: lang-grow .6s var(--ease) both; }
+.lang-seg { flex-basis: 0; min-width: 3px; }
+.lang-legend { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 6px; }
+.lang-item { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; line-height: 1.5; color: var(--dim); white-space: nowrap; }
+.lang-item b { font-weight: 600; color: var(--fg); }
+.lang-item i { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+.langs.big { max-width: 640px; }
+.langs.big .lang-bar { height: 12px; border-radius: 6px; }
+.langs.big .lang-legend { gap: 4px 20px; margin-top: 10px; }
+.langs.big .lang-item { font-size: 15px; }
+@keyframes lang-grow { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }

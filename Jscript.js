@@ -8,7 +8,7 @@
    ========================================================================== */
 const DATA = {
   name: "Denzel Stockenström Verster",
-  role: "BSc Information Technology Graduate | Honours Student in Computer Science and IT",
+  role: "BSc Information Technology Graduate | BSc Honours Student in Computer Science and Information Technology",
   githubUser: "DSVerster",
   /* Time zone used to decide which day a commit belongs to, and to show dates (an IANA name, for example "Africa/Johannesburg") */
   timezone: "Africa/Johannesburg",
@@ -18,6 +18,10 @@ const DATA = {
 
   /* How long (in minutes) GitHub data is reused before it is fetched again. GitHub allows 60 anonymous requests per hour. */
   cacheMinutes: 2,
+
+  /* How long (in minutes) a project's language breakdown is reused. It is also refreshed whenever that repository is pushed to.
+     Each repository costs one GitHub request per refresh. */
+  languageCacheMinutes: 60,
 
   /* Show this portfolio's own repository (DSVerster.github.io) in the Projects list (false = hide it) */
   showPortfolioRepo: true,
@@ -115,7 +119,7 @@ const DATA = {
   /* Short-lived cache: data is reused for DATA.cacheMinutes, then fetched again */
   const cacheGet = key => { try { const c = JSON.parse(sessionStorage.getItem(key)); if (c && Date.now() - c.t < DATA.cacheMinutes * 60000) return c; } catch (e) { /* no cache */ } return null; };
   const cacheSet = (key, data) => { const c = { t: Date.now(), data }; try { sessionStorage.setItem(key, JSON.stringify(c)); } catch (e) { /* storage unavailable */ } return c; };
-  const state = { repos: [], reposStatus: "loading", open: new Set(["portfolio"]), tabs: [], active: null, activity: { status: "loading", buckets: [] }, certFocus: null };
+  const state = { repos: [], reposStatus: "loading", open: new Set(["portfolio"]), tabs: [], active: null, activity: { status: "loading", buckets: [] }, certFocus: null, langs: {} };
 
   /* ---------- Certificate helpers ---------- */
   const fmtDate = iso => new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -128,6 +132,55 @@ const DATA = {
   const certHref = c => encodeURI(c.file);
   const repoDay = iso => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  /* Alphabetical comparison used by the explorer tree (case-insensitive, numbers in natural order) */
+  const byName = (a, b) => a.localeCompare(b, "en", { numeric: true, sensitivity: "base" });
+
+  /* ---------- Languages per repository (the full breakdown, as GitHub shows it) ---------- */
+  const LANG_COLORS = {
+    "Python": "#3572A5", "C++": "#f34b7d", "C": "#555555", "C#": "#178600", "Java": "#b07219", "JavaScript": "#f1e05a",
+    "TypeScript": "#3178c6", "HTML": "#e34c26", "CSS": "#563d7c", "SCSS": "#c6538c", "Shell": "#89e051", "Batchfile": "#C1F12E",
+    "PowerShell": "#2f6fb5", "Pascal": "#E3F171", "Delphi": "#E3F171", "TSQL": "#e38c00", "PLpgSQL": "#336790", "SQL": "#e38c00",
+    "Jupyter Notebook": "#DA5B0B", "MATLAB": "#e16737", "Makefile": "#427819", "CMake": "#DA3434", "Dockerfile": "#384d54",
+    "Go": "#00ADD8", "Rust": "#dea584", "Kotlin": "#A97BFF", "Dart": "#00B4AB", "PHP": "#4F5D95", "Ruby": "#701516",
+    "Swift": "#F05138", "Objective-C": "#438eff", "Lua": "#3d6fb0", "Vue": "#41b883", "Assembly": "#6E4C13", "Verilog": "#b2b7f8",
+    "VHDL": "#adb2cb", "Perl": "#0298c3", "R": "#198CE7", "Haskell": "#5e5086", "Arduino": "#bd79d1"
+  };
+  const langColor = n => LANG_COLORS[n] || "#8b949e";
+  const fmtBytes = b => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
+  const langCacheGet = r => { try { const c = JSON.parse(localStorage.getItem("dsv-lang-v1:" + r.name)); if (c && c.p === r.pushed_at && Date.now() - c.t < DATA.languageCacheMinutes * 60000) return c.d; } catch (e) { /* no cache */ } return null; };
+  const langCacheSet = (r, d) => { try { localStorage.setItem("dsv-lang-v1:" + r.name, JSON.stringify({ p: r.pushed_at, t: Date.now(), d })); } catch (e) { /* storage unavailable */ } };
+
+  /* Every language of the repository: one stacked bar plus a legend with each percentage (GitHub style) */
+  function langHtml(r) {
+    const d = state.langs[r.name];
+    if (!d) return `<span class="lang-fallback">${esc(r.language || "Mixed")}</span>`;   /* shown until the full breakdown has loaded */
+    const total = Object.values(d).reduce((a, b) => a + b, 0);
+    if (!total) return `<span class="lang-fallback">No code detected</span>`;
+    const list = Object.entries(d).sort((a, b) => b[1] - a[1]).map(([name, bytes]) => {
+      const pct = bytes / total * 100;
+      return { name, bytes, color: langColor(name), label: pct < 0.1 ? "<0.1%" : pct.toFixed(1) + "%", tip: `${name}: ${pct < 0.1 ? "<0.1" : pct.toFixed(1)}% (${fmtBytes(bytes)})` };
+    });
+    return `<span class="lang-bar" role="img" aria-label="${esc("Languages: " + list.map(l => `${l.name} ${l.label}`).join(", "))}">${list.map(l => `<span class="lang-seg" style="flex-grow:${l.bytes};background:${l.color}" title="${esc(l.tip)}"></span>`).join("")}</span>
+      <span class="lang-legend">${list.map(l => `<span class="lang-item" title="${esc(l.tip)}"><i style="background:${l.color}"></i><b>${esc(l.name)}</b> ${esc(l.label)}</span>`).join("")}</span>`;
+  }
+  const langBox = (r, big) => `<span class="langs${big ? " big" : ""}" data-lang-repo="${esc(r.name)}"${state.langs[r.name] ? " data-done" : ""}>${langHtml(r)}</span>`;
+  /* Fills in breakdowns that arrived after the page was drawn, without redrawing the page */
+  const fillLangs = () => document.querySelectorAll("[data-lang-repo]:not([data-done])").forEach(el => {
+    const r = state.repos.find(x => x.name === el.dataset.langRepo);
+    if (r && state.langs[r.name]) { el.innerHTML = langHtml(r); el.setAttribute("data-done", ""); }
+  });
+  async function loadLanguages() {
+    if (state.reposStatus !== "ok") return;
+    await Promise.allSettled(state.repos.map(async r => {
+      let d = langCacheGet(r);
+      if (!d) {
+        const res = await fetch(`https://api.github.com/repos/${DATA.githubUser}/${encodeURIComponent(r.name)}/languages`);
+        if (!res.ok) throw new Error(res.status);
+        d = await res.json(); langCacheSet(r, d);
+      }
+      state.langs[r.name] = d; fillLangs();
+    }));
+  }
 
   /* ---------- Activity graph (commits in public repositories, one point per day in the configured time zone) ---------- */
   const shortDate = d => d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" });
@@ -212,10 +265,10 @@ const DATA = {
     });
     const total = b.reduce((a, x) => a + x.commits, 0), active = b.filter(x => x.commits > 0 || x.repos > 0).length;
     const summary = (active ? `${plural(total, "commit", "commits")} across ${plural(b.repoCount || 0, "repository", "repositories")}, active on ${active} of ${b.length} days` : "No activity in this period") + " · public activity only" + (fetchedAt ? ` · updated ${new Date(fetchedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: DATA.timezone })}` : "");
-    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Public GitHub activity: ${esc(summary)}">${g}</svg>
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="GitHub activity: ${esc(summary)}">${g}</svg>
       <ul class="legend">${ser.map(s => `<li><i class="sw ${s.cls === "s-a" ? "a" : "b"}"></i>${esc(s.name)}</li>`).join("")}</ul>
       <p class="meta note">${esc(summary)}</p>
-      <table class="sr"><caption>Public GitHub activity by date</caption><tr><th>Date</th>${ser.map(s => `<th>${esc(s.name)}</th>`).join("")}</tr>${b.map(x => `<tr><td>${esc(shortDate(x.end))}</td>${ser.map(s => `<td>${x[s.key]}</td>`).join("")}</tr>`).join("")}</table>`;
+      <table class="sr"><caption>GitHub activity by date</caption><tr><th>Date</th>${ser.map(s => `<th>${esc(s.name)}</th>`).join("")}</tr>${b.map(x => `<tr><td>${esc(shortDate(x.end))}</td>${ser.map(s => `<td>${x[s.key]}</td>`).join("")}</tr>`).join("")}</table>`;
   }
 
   const activityHtml = () => {
@@ -271,7 +324,7 @@ const DATA = {
     return `<h1>Certificates</h1>
       <p>I have earned ${plural(total, "certificate", "certificates")} from ${plural(groups.length, "provider", "providers")}. They are grouped by provider, newest first. Select a title for the details, or open the PDF directly.</p>
       ${total > 5 ? `<div class="cert-tools"><label class="sr" for="certFilter">Filter certificates</label><input id="certFilter" type="search" placeholder="Filter by title, provider or type" autocomplete="off"><span class="meta" id="certCount" aria-live="polite"></span></div>` : ""}
-      ${groups.map(([g, list], i) => `<details class="cert-group" data-group="${esc(g)}" ${(state.certFocus ? g === state.certFocus : i < 2) ? "open" : ""}>
+      ${groups.map(([g, list], i) => `<details class="cert-group" data-group="${esc(g)}" ${(state.certFocus ? g === state.certFocus : true) ? "open" : ""}>
         <summary><span>${esc(g)}</span><span class="meta">${plural(list.length, "certificate", "certificates")} ${list[0].date ? ` &middot; latest ${esc(fmtDate(list[0].date))}` : ""}</span></summary>
         <div class="cert-list">${list.map(certRow).join("")}</div></details>`).join("")}`;
   };
@@ -306,7 +359,7 @@ const DATA = {
     if (state.reposStatus === "loading") return `<p class="placeholder">Loading repositories from GitHub&hellip;</p>`;
     if (state.reposStatus === "error") return `<p class="placeholder">The repositories could not be loaded at this time. Please view them directly on <a href="https://github.com/${DATA.githubUser}?tab=repositories" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>`;
     if (!state.repos.length) return `<p class="placeholder">No public repositories are available yet.</p>`;
-    return `<div class="facts">${state.repos.slice(0, limit ?? 999).map(r => `<button class="card" data-open="projects/${esc(r.name)}"><strong>${esc(r.name)}</strong><small>${esc(r.language || "Mixed")}</small><small>Created ${esc(repoDay(r.created_at))}</small><small>Updated ${esc(repoDay(r.pushed_at))}</small>${compact
+    return `<div class="facts">${state.repos.slice(0, limit ?? 999).map(r => `<button class="card" data-open="projects/${esc(r.name)}"><strong>${esc(r.name)}</strong>${langBox(r)}<small>Created ${esc(repoDay(r.created_at))}</small><small>Updated ${esc(repoDay(r.pushed_at))}</small>${compact
       ? ""
       : `<p>${esc(r.description || "Description to be added.")}</p>`}</button>`).join("")}</div>`;
   };
@@ -333,19 +386,19 @@ const DATA = {
         <a class="btn" href="${esc(DATA.cv)}" download>Download CV (PDF)</a>
         <button class="btn" data-scroll="contact-card">Contact me</button></div></div>
       <h2>About me</h2><p>${esc(DATA.summary)}</p></div>
-      <aside class="about-side"><h2>Public GitHub Activity</h2><div class="activity-card" id="activity">${activityHtml()}</div></aside>
+      <aside class="about-side"><h2>GitHub Activity</h2><div class="activity-card" id="activity">${activityHtml()}</div></aside>
       <div class="about-rest">
       <h2>Education</h2>${staticCards(DATA.education)}
       <h2>Experience</h2>${DATA.experience.length ? staticCards(DATA.experience) : '<p class="placeholder">I will add further experience here as I gain it.</p>'}
       <h2>Skills and languages</h2>${skillsHtml()}
       <h2>Projects</h2>${repoCards(DATA.aboutLimits.projects, true)}
-      ${state.repos.length > DATA.aboutLimits.projects ? '<p><button class="btn" data-open="projects">View all projects</button></p>' : ""}
+      ${state.repos.length > DATA.aboutLimits.projects ? `<p><button class="btn" data-open="projects">View all ${plural(state.repos.length, "project", "projects")}</button></p>` : ""}
       <h2>Certificates</h2>${aboutCerts()}
       <h2>Contact</h2>${contactBlock()}</div></div>`,
     experience: () => overview("Experience", DATA.experience, "experience", "I will add further experience here as I gain it."),
     education: () => overview("Education", DATA.education, "education", "My education details will appear here.", certSection(), "Degrees"),
     certificates: certOverview,
-    projects: () => `<h1>Projects</h1><p>These are retrieved automatically from my public <a href="https://github.com/${DATA.githubUser}" target="_blank" rel="noopener noreferrer">GitHub profile</a>, so the list stays current as I build new things.</p>${repoCards()}`,
+    projects: () => `<h1>Projects</h1><p>These are retrieved automatically from my public <a href="https://github.com/${DATA.githubUser}" target="_blank" rel="noopener noreferrer">GitHub profile</a>, so the list stays current as I build and contribute to new projects.</p>${repoCards()}`,
     skills: () => `<h1>Skills</h1>${Object.entries(DATA.skills).map(([k, v]) => `<h2>${esc(k)}</h2><ul class="chips">${v.map(s => `<li>${esc(s)}</li>`).join("")}</ul>`).join("")}`,
     contact: () => `<h1>Contact</h1><p>If you would like to work with me, or simply to talk about a project, please get in touch. I will gladly reply as soon as I can.</p>${contactBlock()}`
   };
@@ -356,10 +409,11 @@ const DATA = {
     if (!child) return views[folder] ? { title: { about: "About.md", skills: "Skills.json", contact: "Contact.md" }[folder] || folder, html: views[folder]() } : null;
     if (folder === "projects") {
       const r = state.repos.find(x => x.name === child);
-      return r ? { title: r.name, html: `<h1>${esc(r.name)}</h1><p class="meta">${esc(r.language || "Mixed")} &middot; Created ${repoDay(r.created_at)} &middot; Updated ${repoDay(r.pushed_at)}</p>
+      return r ? { title: r.name, html: `<h1>${esc(r.name)}</h1><p class="meta">Created ${repoDay(r.created_at)} &middot; Updated ${repoDay(r.pushed_at)}</p>
         <p>${esc(r.description || "Description to be added.")}</p>
-        <a class="btn" href="${esc(r.html_url)}" target="_blank" rel="noopener noreferrer">View repository</a>
-        ${r.homepage ? `<a class="btn" href="${esc(r.homepage)}" target="_blank" rel="noopener noreferrer">Live demonstration</a>` : ""}` } : null;
+        <h2>Languages</h2>${langBox(r, true)}
+        <p><a class="btn" href="${esc(r.html_url)}" target="_blank" rel="noopener noreferrer">View repository</a>
+        ${r.homepage ? `<a class="btn" href="${esc(r.homepage)}" target="_blank" rel="noopener noreferrer">Live demonstration</a>` : ""}</p>` } : null;
     }
     if (folder === "certificates") {
       const c = DATA.certificates.find(x => x.id === child);
@@ -407,18 +461,22 @@ const DATA = {
 
   /* ---------- Explorer tree ---------- */
   const badge = (t, c) => `<span class="badge" style="--c:${c}">${t}</span>`;
+
+  /* A folder lists its sub-folders first (the "extra" block), then its files in alphabetical order */
   const folderNode = (id, name, emptyText, children, extra = "") => {
     const isOpen = state.open.has(id);
+    const sorted = [...children].sort((a, b) => byName(a.label, b.label));
     return `<div class="folder ${isOpen ? "open" : ""}"><button class="node ${state.active === id ? "active" : ""}" data-folder="${id}" style="--d:1" role="treeitem" aria-expanded="${isOpen}"><span class="chev">&#9654;</span><span class="label">${name}</span></button>
-      <div class="kids"><div>${children.length ? children.map(c => `<button class="node ${state.active === id + "/" + c.id ? "active" : ""}" data-open="${id}/${esc(c.id)}" style="--d:3">${badge("MD", "var(--blue)")}<span class="label">${esc(c.label)}</span></button>`).join("") : `<div class="empty-note" style="--d:3">${emptyText}</div>`}${extra}</div></div></div>`;
+      <div class="kids"><div>${extra}${sorted.length ? sorted.map(c => `<button class="node ${state.active === id + "/" + c.id ? "active" : ""}" data-open="${id}/${esc(c.id)}" style="--d:3">${badge("MD", "var(--blue)")}<span class="label">${esc(c.label)}</span></button>`).join("") : (extra ? "" : `<div class="empty-note" style="--d:3">${emptyText}</div>`)}</div></div></div>`;
   };
 
-  /* Certificates are nested by provider so the tree stays short as the list grows */
+  /* Certificates are nested by provider so the tree stays short as the list grows (providers and certificates A to Z) */
   const certFolder = (d = 1) => {
     const isOpen = state.open.has("certificates");
-    const groups = [...certGroups()];
+    const groups = [...certGroups()].sort((a, b) => byName(a[0], b[0]));
     const inner = groups.length ? groups.map(([g, list]) => {
       const gOpen = state.open.has("cg:" + g);
+      list = [...list].sort((a, b) => byName(a.title, b.title));
       return `<div class="folder ${gOpen ? "open" : ""}"><button class="node" data-certgroup="${esc(g)}" style="--d:${d + 2}" aria-expanded="${gOpen}"><span class="chev">&#9654;</span><span class="label">${esc(g)} (${list.length})</span></button>
         <div class="kids"><div>${list.map(c => `<button class="node ${state.active === "certificates/" + c.id ? "active" : ""}" data-open="certificates/${esc(c.id)}" style="--d:${d + 4}">${badge("PDF", "var(--string)")}<span class="label">${esc(c.title)}</span></button>`).join("")}</div></div></div>`;
     }).join("") : `<div class="empty-note" style="--d:${d + 2}">Nothing added yet</div>`;
@@ -426,21 +484,29 @@ const DATA = {
       <div class="kids"><div>${inner}</div></div></div>`;
   };
 
+  /* Like a normal file directory: folders first, then files, each group in alphabetical order */
   function renderTree() {
     const file = (id, name, ext, c) => `<button class="node ${state.active === id ? "active" : ""}" data-open="${id}" style="--d:1">${badge(ext, c)}<span class="label">${name}</span></button>`;
     const kids = list => list.map(e => ({ id: e.id, label: e.title }));
     const repoKids = state.repos.map(r => ({ id: r.name, label: r.name }));
+    const emptyRepos = state.reposStatus === "loading" ? "Loading&hellip;" : state.reposStatus === "error" ? "Unavailable" : "Nothing added yet";
+
+    const folders = [
+      { name: "Education",  html: folderNode("education", "Education", "Nothing added yet", kids(DATA.education), DATA.certificatesInEducation ? certFolder(3) : "") },
+      { name: "Experience", html: folderNode("experience", "Experience", "Nothing added yet", kids(DATA.experience)) },
+      { name: "Projects",   html: folderNode("projects", "Projects", emptyRepos, repoKids) },
+      ...(DATA.certificatesInEducation ? [] : [{ name: "Certificates", html: certFolder(1) }])
+    ].sort((a, b) => byName(a.name, b.name)).map(f => f.html).join("");
+
+    const files = [
+      { name: "About.md",    html: file("about", "About.md", "MD", "var(--blue)") },
+      { name: "Contact.md",  html: file("contact", "Contact.md", "MD", "var(--blue)") },
+      { name: "Skills.json", html: file("skills", "Skills.json", "{ }", "var(--fn)") }
+    ].sort((a, b) => byName(a.name, b.name)).map(f => f.html).join("");
+
     $("#tree").innerHTML = `
       <button class="node" data-folder="portfolio" style="--d:0"><span class="chev" style="transform:${state.open.has("portfolio") ? "rotate(90deg)" : "none"}">&#9654;</span><span class="label"><strong>PORTFOLIO</strong></span></button>
-      <div class="kids" style="grid-template-rows:${state.open.has("portfolio") ? "1fr" : "0fr"}"><div>
-        ${file("about", "About.md", "MD", "var(--blue)")}
-        ${folderNode("experience", "Experience", "Nothing added yet", kids(DATA.experience))}
-        ${folderNode("education", "Education", "Nothing added yet", kids(DATA.education), DATA.certificatesInEducation ? certFolder(3) : "")}
-        ${file("skills", "Skills.json", "{ }", "var(--fn)")}
-        ${folderNode("projects", "Projects", state.reposStatus === "loading" ? "Loading&hellip;" : state.reposStatus === "error" ? "Unavailable" : "Nothing added yet", repoKids)}
-        ${DATA.certificatesInEducation ? "" : certFolder(1)}
-        ${file("contact", "Contact.md", "MD", "var(--blue)")}
-      </div></div>`;
+      <div class="kids" style="grid-template-rows:${state.open.has("portfolio") ? "1fr" : "0fr"}"><div>${folders}${files}</div></div>`;
   }
 
   /* ---------- Events ---------- */
@@ -537,6 +603,9 @@ const DATA = {
     })
     .catch(err => { console.error("GitHub API error:", err); state.reposStatus = "error"; $("#statusRepos").textContent = "GitHub repositories unavailable"; })
     .finally(() => { const s = location.hash.slice(1); if (s.startsWith("projects/") && !state.tabs.includes(s)) open(s); else render(); });
+
+  /* Full language breakdowns arrive after the repositories and are filled in without redrawing the page */
+  reposDone.then(loadLanguages);
 
   /* The graph updates in place, so the page does not jump when the data arrives */
   /* Only for landscape screens (wider than tall); portrait screens skip the graph and its request */
