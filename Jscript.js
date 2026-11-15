@@ -35,7 +35,7 @@ const DATA = {
   linkedin: "https://www.linkedin.com/in/denzel-verster-642373375/",
   cv: "media/DS Verster Cirriculum-Vitae.pdf",
   photo: "media/CirriculumVitae_Me.jpg",
-  summary: "I am an Information Technology graduate from North-West University, and I am now studying towards an Honours degree in Computer Science and Information Technology. I enjoy programming, computer hardware and hands-on projects, particularly Raspberry Pi systems, and I am comfortable working across several programming languages, networking and problem-solving. I am looking for the opportunity to apply what I have learnt in a real working environment, and I value every chance to keep learning alongside other people.",
+  summary: "I am a Honours Computer Science and Information Technology graduate from North-West University, and I am now studying towards an Masters degree in Computer Science and Information Technology. I enjoy programming, computer hardware and hands-on projects, particularly Raspberry Pi systems (or somehting similar like; microcontrollers), and I am comfortable working across several programming languages, networking and problem-solving. I am looking for the opportunity to apply what I have learnt in a real working environment, and I value every chance to keep learning alongside other people.",
 
   education: [
     { id: "nwu-honours", title: "BSc Honours Computer Science and Information Technology", org: "North-West University", logo: "media/NWU-Logo-SWIcon.png",
