@@ -20,6 +20,7 @@ DSVerster.github.io
 │   stylesheet.css
 │
 ├───certificates
+│       Great Learning Intro to Cyber Security.pdf
 │       MATLAB App Building Onramp certificate.pdf
 │       MATLAB Core MATLAB Skills certificate.pdf
 │       MATLAB Data Analysis in MATLAB certificate.pdf
@@ -49,3 +50,4 @@ All content lives in the `DATA` block at the top of `Jscript.js`.
 - **Activity graph:** the About page charts my public GitHub activity per day (the last 30 days by default). In `Jscript.js`, `activity: { days, labelEvery, series }` sets the period, how often a date label is shown, and which two measures are plotted (repositories worked on, commits, pushes, branches, items created or all activity). The vertical scale fits the busiest day automatically.
 - **About page limits:** `aboutLimits: { projects, certificates }` in `Jscript.js` sets how many projects and certificates the About page shows.
 - **Animation speeds:** `--orbit-time` (the circling dots) and `--graph-time` (the graph drawing itself) are at the top of the motion section in `stylesheet.css`.
+- **Contribution calendar:** the About page shows the same calendar as my GitHub profile, loaded from the free `github-contributions-api.jogruber.de` service. Like the activity graph, it is hidden on portrait screens.

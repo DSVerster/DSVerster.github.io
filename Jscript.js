@@ -15,7 +15,7 @@ const DATA = {
   activity: { days: 30, labelEvery: 2, series: ["repos", "commits"] },
 
   /* How many projects and certificates the About.md page shows before the "View all" button (use 0 to show none) */
-  aboutLimits: { projects: 6, certificates: 4 },
+  aboutLimits: { projects: 5, certificates: 5 },
   email: "denzelverster@gmail.com",
   linkedin: "https://www.linkedin.com/in/denzel-verster-642373375/",
   cv: "media/DS Verster Cirriculum-Vitae.pdf",
@@ -47,6 +47,13 @@ const DATA = {
       credentialId: "864b8c59-19a2-4bf5-9aab-4d3d9c9107a2",
       url: "",
       details: ["I completed all requirements of the Neo4j GraphAcademy Generative AI Fundamentals programme."] },
+
+    { id: "great-learning-cyber-security", group: "Great Learning", org: "Great Learning", type: "Course",
+      title: "Introduction to Cyber Security", date: "", /* add the completion date as "YYYY-MM-DD" */
+      file: "certificates/Great Learning Intro to Cyber Security.pdf",
+      credentialId: "JLYMVDCH",
+      url: "https://verify.mygreatlearning.com/JLYMVDCH",
+      details: ["I completed this introductory course on cyber security."] },
 
     { id: "data-analysis-in-matlab", group: "MathWorks", org: "MathWorks", type: "Learning path",
       title: "Data Analysis in MATLAB", date: "2026-01-28",
@@ -94,11 +101,11 @@ const DATA = {
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const mobile = () => matchMedia("(max-width: 768px)").matches;
-  const state = { repos: [], reposStatus: "loading", open: new Set(["portfolio"]), tabs: [], active: null, activity: { status: "loading", buckets: [] } };
+  const state = { repos: [], reposStatus: "loading", open: new Set(["portfolio"]), tabs: [], active: null, activity: { status: "loading", buckets: [] }, contrib: { status: "loading", total: 0, days: [] } };
 
   /* ---------- Certificate helpers ---------- */
   const fmtDate = iso => new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
-  const sortedCerts = () => [...DATA.certificates].sort((a, b) => b.date.localeCompare(a.date));
+  const sortedCerts = () => [...DATA.certificates].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   const certGroups = () => {
     const m = new Map();
     sortedCerts().forEach(c => { if (!m.has(c.group)) m.set(c.group, []); m.get(c.group).push(c); });
@@ -200,12 +207,12 @@ const DATA = {
     });
     g += `<line class="axis" x1="${L}" x2="${L}" y1="${T}" y2="${T + ih}"/><line class="axis" x1="${L}" x2="${W - R}" y1="${T + ih}" y2="${T + ih}"/>`;
     const dotR = b.length > 20 ? 3 : 3.5;
-    /* No outlined points for the quiet days after the last real activity (the line itself still runs to today) */
-    const lastActive = b.reduce((last, x, i) => ser.some(s => x[s.key] > 0) ? i : last, -1);
+    /* A zero day gets an outlined point only where the line drops from activity to zero; runs of quiet days get none */
+    const showDot = (s, i) => b[i][s.key] > 0 || (i > 0 && b[i - 1][s.key] > 0);
     ser.forEach(s => {
       const pts = b.map((x, i) => [X(i), Y(x[s.key])]);
       g += `<path class="line ${s.cls}" pathLength="1" d="${smoothPath(pts)}"/>`;
-      pts.forEach((p, i) => { if (i > lastActive) return; g += `<circle class="dot ${s.cls}" cx="${rnd(p[0])}" cy="${rnd(p[1])}" r="${dotR}" style="--f:${(i / (b.length - 1)).toFixed(3)}"><title>${esc(shortDate(b[i].end))}: ${plural(b[i][s.key], s.one, s.many)}</title></circle>`; });
+      pts.forEach((p, i) => { if (!showDot(s, i)) return; g += `<circle class="dot ${s.cls}" cx="${rnd(p[0])}" cy="${rnd(p[1])}" r="${dotR}" style="--f:${(i / (b.length - 1)).toFixed(3)}"><title>${esc(shortDate(b[i].end))}: ${plural(b[i][s.key], s.one, s.many)}</title></circle>`; });
     });
     const commits = b.reduce((a, x) => a + x.commits, 0), active = b.filter(x => x.pushes > 0).length;
     const summary = active ? `${plural(commits, "commit", "commits")} across ${plural(b.repoCount || 0, "repository", "repositories")}, active on ${active} of ${b.length} days` : "No public activity in this period";
@@ -237,6 +244,50 @@ const DATA = {
     return out;
   }
 
+  /* ---------- Contribution matrix (the calendar GitHub shows on a profile) ---------- */
+  const longDate = d => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+
+  function contribHtml() {
+    const c = state.contrib;
+    if (c.status === "loading") return `<p class="placeholder">Loading contributions from GitHub&hellip;</p>`;
+    if (c.status === "error" || !c.days.length) return `<p class="placeholder">My contributions could not be loaded at this time. Please view them directly on <a href="https://github.com/${DATA.githubUser}" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>`;
+    const days = c.days;
+    const lead = new Date(days[0].date + "T00:00:00").getDay();   /* weeks run Sunday to Saturday, as on GitHub */
+    const cols = Math.ceil((lead + days.length) / 7);
+    let labels = [], prev = -1;
+    for (let col = 0; col < cols; col++) {
+      const d = new Date(days[Math.max(0, col * 7 - lead)].date + "T00:00:00");
+      if (d.getMonth() !== prev) { labels.push({ col, name: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getMonth()] }); prev = d.getMonth(); }
+    }
+    if (labels.length > 1 && labels[1].col - labels[0].col < 3) labels.shift(); /* avoid a cramped first label */
+    const cells = `<i class="cell pad"></i>`.repeat(lead) + days.map(x => {
+      const when = longDate(new Date(x.date + "T00:00:00"));
+      return `<i class="cell l${Math.min(4, Math.max(0, x.level | 0))}" title="${esc(x.count ? plural(x.count, "contribution", "contributions") : "No contributions")} on ${esc(when)}"></i>`;
+    }).join("");
+    return `<div class="contrib-card">
+      <p class="contrib-title">${esc(plural(c.total, "contribution", "contributions"))} in the last year</p>
+      <div class="contrib-scroll"><div class="contrib-wrap">
+        <div class="contrib-days" aria-hidden="true">${["", "Mon", "", "Wed", "", "Fri", ""].map(x => `<span>${x}</span>`).join("")}</div>
+        <div class="contrib-main">
+          <div class="contrib-months" aria-hidden="true" style="--w:${cols}">${labels.map(l => `<span style="grid-column:${l.col + 1} / span 3">${esc(l.name)}</span>`).join("")}</div>
+          <div class="contrib-cells" role="img" aria-label="${esc(plural(c.total, "contribution", "contributions"))} on GitHub in the last year">${cells}</div>
+        </div>
+      </div></div>
+      <div class="contrib-foot"><a href="https://docs.github.com/en/account-and-profile/setting-up-and-managing-your-github-profile/managing-contribution-settings-on-your-profile/viewing-contributions-on-your-profile" target="_blank" rel="noopener noreferrer">Learn how GitHub counts contributions</a>
+        <span class="contrib-legend">Less ${[0, 1, 2, 3, 4].map(l => `<i class="cell l${l}"></i>`).join("")} More</span></div></div>`;
+  }
+
+  async function loadContrib() {
+    try { const c = JSON.parse(sessionStorage.getItem("dsv-contrib")); if (c) return c; } catch (e) { /* no cache */ }
+    const r = await fetch(`https://github-contributions-api.jogruber.de/v4/${DATA.githubUser}?y=last`);
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    if (!Array.isArray(j.contributions) || !j.contributions.length) throw new Error("No contribution data");
+    const out = { total: j.total && j.total.lastYear != null ? j.total.lastYear : j.contributions.reduce((a, x) => a + x.count, 0), days: j.contributions };
+    try { sessionStorage.setItem("dsv-contrib", JSON.stringify(out)); } catch (e) { /* storage unavailable */ }
+    return out;
+  }
+
   /* ---------- Views ---------- */
   const entryDetail = (e, kind) => `
     <h1>${esc(e.title)}</h1>
@@ -248,7 +299,7 @@ const DATA = {
 
   const certRow = c => `<div class="cert-row" data-search="${esc([c.title, c.org, c.group, c.type].join(" ").toLowerCase())}">
       <button class="cert-title" data-open="certificates/${esc(c.id)}">${esc(c.title)}</button>
-      <span class="tag">${esc(c.type)}</span><span class="meta">${esc(fmtDate(c.date))}</span>
+      <span class="tag">${esc(c.type)}</span><span class="meta">${c.date ? esc(fmtDate(c.date)) : ""}</span>
       <a class="cert-pdf" href="${esc(certHref(c))}" target="_blank" rel="noopener noreferrer" aria-label="Open the PDF for ${esc(c.title)}">PDF</a></div>`;
 
   const certOverview = () => {
@@ -259,14 +310,14 @@ const DATA = {
       <p>I have earned ${plural(total, "certificate", "certificates")} from ${plural(groups.length, "provider", "providers")}. They are grouped by provider, newest first. Select a title for the details, or open the PDF directly.</p>
       ${total > 5 ? `<div class="cert-tools"><label class="sr" for="certFilter">Filter certificates</label><input id="certFilter" type="search" placeholder="Filter by title, provider or type" autocomplete="off"><span class="meta" id="certCount" aria-live="polite"></span></div>` : ""}
       ${groups.map(([g, list], i) => `<details class="cert-group" ${i < 2 ? "open" : ""}>
-        <summary><span>${esc(g)}</span><span class="meta">${plural(list.length, "certificate", "certificates")} &middot; latest ${esc(fmtDate(list[0].date))}</span></summary>
+        <summary><span>${esc(g)}</span><span class="meta">${plural(list.length, "certificate", "certificates")} ${list[0].date ? ` &middot; latest ${esc(fmtDate(list[0].date))}` : ""}</span></summary>
         <div class="cert-list">${list.map(certRow).join("")}</div></details>`).join("")}`;
   };
 
   const certDetail = c => `
     <h1>${esc(c.title)}</h1>
     <div class="entry-head"><div><strong>${esc(c.org)}</strong>
-      <div class="meta">${esc(c.type)} &middot; Completed ${esc(fmtDate(c.date))}</div>
+      <div class="meta">${esc(c.type)}${c.date ? ` &middot; Completed ${esc(fmtDate(c.date))}` : ""}</div>
       ${c.credentialId ? `<div class="meta">Credential ID: ${esc(c.credentialId)}</div>` : ""}</div></div>
     <h2>About this certificate</h2>
     <ul class="plain">${(c.details || []).map(d => `<li>${esc(d)}</li>`).join("")}</ul>
@@ -299,7 +350,7 @@ const DATA = {
   const aboutCerts = () => {
     const n = DATA.certificates.length;
     if (!n) return '<p class="placeholder">My certificates will appear here as I earn them.</p>';
-    return `<div class="facts">${sortedCerts().slice(0, DATA.aboutLimits.certificates).map(c => `<button class="card" data-open="certificates/${esc(c.id)}"><strong>${esc(c.title)}</strong><small>${esc(c.org)}</small><small>${esc(fmtDate(c.date))}</small></button>`).join("")}</div>
+    return `<div class="facts">${sortedCerts().slice(0, DATA.aboutLimits.certificates).map(c => `<button class="card" data-open="certificates/${esc(c.id)}"><strong>${esc(c.title)}</strong><small>${esc(c.org)}</small>${c.date ? `<small>${esc(fmtDate(c.date))}</small>` : ""}</button>`).join("")}</div>
       ${n > DATA.aboutLimits.certificates ? `<p><button class="btn" data-open="certificates">View all ${n} certificates</button></p>` : ""}`;
   };
 
@@ -313,6 +364,7 @@ const DATA = {
       <h2>About me</h2><p>${esc(DATA.summary)}</p></div>
       <aside class="about-side"><h2>Public Github Activity</h2><div class="activity-card" id="activity">${activityHtml()}</div></aside>
       <div class="about-rest">
+      <section class="about-contrib"><h2>GitHub Contributions</h2><div id="contrib">${contribHtml()}</div></section>
       <h2>Education</h2>${staticCards(DATA.education)}
       <h2>Experience</h2>${DATA.experience.length ? staticCards(DATA.experience) : '<p class="placeholder">I will add further experience here as I gain it.</p>'}
       <h2>Skills and languages</h2>${skillsHtml()}
@@ -504,6 +556,10 @@ const DATA = {
   function startActivity() {
     if (activityStarted) return;
     activityStarted = true;
+    loadContrib()
+      .then(d => { state.contrib = { status: "ok", ...d }; })
+      .catch(err => { console.error("GitHub contributions error:", err); state.contrib.status = "error"; })
+      .finally(() => { const el = $("#contrib"); if (el) el.innerHTML = contribHtml(); });
     loadEvents()
       .then(ev => { state.activity = { status: "ok", buckets: buildBuckets(ev) }; })
       .catch(err => { console.error("GitHub activity error:", err); state.activity.status = "error"; })
