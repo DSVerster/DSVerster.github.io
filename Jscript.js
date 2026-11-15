@@ -31,11 +31,11 @@ const DATA = {
   summary: "I am an Information Technology graduate from North-West University, and I am now studying towards an Honours degree in Computer Science and Information Technology. I enjoy programming, computer hardware and hands-on projects, particularly Raspberry Pi systems, and I am comfortable working across several programming languages, networking and problem-solving. I am looking for the opportunity to apply what I have learnt in a real working environment, and I value every chance to keep learning alongside other people.",
 
   education: [
-    { id: "nwu-honours", title: "Honours Degree in Computer Science and IT", org: "North-West University", logo: "media/NWU-Logo-SWIcon.png",
-      url: "https://www.nwu.ac.za/", period: "2026 – Present (In progress)",
+    { id: "nwu-honours", title: "BSc Honours Computer Science and Information Technology", org: "North-West University", logo: "media/NWU-Logo-SWIcon.png",
+      url: "https://www.nwu.ac.za/", period: "January 2026 – December 2026",
       details: ["I am currently pursuing postgraduate study in Computer Science and Information Technology."] },
     { id: "nwu-bsc", title: "BSc Information Technology", org: "North-West University", logo: "media/NWU-Logo-SWIcon.png",
-      url: "https://www.nwu.ac.za/", period: "2023 – 2025 (Completed)",
+      url: "https://www.nwu.ac.za/", period: "January 2023 – December 2025",
       details: ["I studied how computerised systems are designed, developed and delivered.", "I learnt how information and information sources are managed.", "I developed IT-related solutions, with an emphasis on lifelong learning and entrepreneurship."] }
   ],
 
@@ -57,7 +57,7 @@ const DATA = {
       details: ["I completed all requirements of the Neo4j GraphAcademy Generative AI Fundamentals programme."] },
 
     { id: "great-learning-cyber-security", group: "Great Learning", org: "Great Learning", type: "Course",
-      title: "Introduction to Cyber Security", date: "", /* add the completion date as "YYYY-MM-DD" */
+      title: "Introduction to Cyber Security", date: "2024-03-27",
       file: "certificates/Great Learning Intro to Cyber Security.pdf",
       credentialId: "JLYMVDCH",
       url: "https://verify.mygreatlearning.com/JLYMVDCH",
