@@ -8,7 +8,7 @@
    ========================================================================== */
 const DATA = {
   name: "Denzel Stockenström Verster",
-  role: "BSc Information Technology Graduate | BSc Honours Student in Computer Science and Information Technology",
+  role: "BSc Information Technology Graduate | Honours Student in Computer Science and IT",
   githubUser: "DSVerster",
   /* Time zone used to decide which day a commit belongs to, and to show dates (an IANA name, for example "Africa/Johannesburg") */
   timezone: "Africa/Johannesburg",
@@ -17,7 +17,10 @@ const DATA = {
   activity: { days: 30, labelEvery: 2 },
 
   /* How long (in minutes) GitHub data is reused before it is fetched again. GitHub allows 60 anonymous requests per hour. */
-  cacheMinutes: 10,
+  cacheMinutes: 2,
+
+  /* Data file refreshed every 15 minutes by the GitHub Action (see README). The site reads it first, so it does not depend on GitHub's hourly request limit. */
+  snapshotFile: "data/github.json",
 
   /* How long (in minutes) a project's language breakdown is reused. It is also refreshed whenever that repository is pushed to.
      Each repository costs one GitHub request per refresh. */
@@ -35,7 +38,7 @@ const DATA = {
   linkedin: "https://www.linkedin.com/in/denzel-verster-642373375/",
   cv: "media/DS Verster Cirriculum-Vitae.pdf",
   photo: "media/CirriculumVitae_Me.jpg",
-  summary: "I am an Information Technology graduate from North-West University, and I am now studying towards an Honours degree in Computer Science and Information Technology. I enjoy programming, computer hardware and hands-on projects, particularly Raspberry Pi systems, and I am comfortable working across several programming languages, networking and problem-solving. I am looking for the opportunity to apply what I have learned in a real working environment, and I value every chance to keep learning alongside other people.",
+  summary: "I am an Information Technology graduate from North-West University, and I am now studying towards an Honours degree in Computer Science and Information Technology. I enjoy programming, computer hardware and hands-on projects, particularly Raspberry Pi systems, and I am comfortable working across several programming languages, networking and problem-solving. I am looking for the opportunity to apply what I have learnt in a real working environment, and I value every chance to keep learning alongside other people.",
 
   education: [
     { id: "nwu-honours", title: "BSc Honours Computer Science and Information Technology", org: "North-West University", logo: "media/NWU-Logo-SWIcon.png",
@@ -116,6 +119,10 @@ const DATA = {
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const mobile = () => matchMedia("(max-width: 768px)").matches;
+  /* The snapshot is "current" for a repository when it was made at or after that repository's latest push */
+  const snapRepo = n => state.snapshot && state.snapshot.repos.find(x => x.name === n);
+  const snapCurrent = r => { const s = snapRepo(r.name); return !!s && s.pushed_at >= r.pushed_at; };
+  const snapLangs = n => state.snapshot && state.snapshot.languages && state.snapshot.languages[n];
   /* Short-lived cache: data is reused for DATA.cacheMinutes, then fetched again */
   const cacheGet = key => { try { const c = JSON.parse(sessionStorage.getItem(key)); if (c && Date.now() - c.t < DATA.cacheMinutes * 60000) return c; } catch (e) { /* no cache */ } return null; };
   const cacheSet = (key, data) => { const c = { t: Date.now(), data }; try { sessionStorage.setItem(key, JSON.stringify(c)); } catch (e) { /* storage unavailable */ } return c; };
@@ -126,7 +133,7 @@ const DATA = {
     if (res.status === 403 || res.status === 429) state.rateLimited = true;
     return res;
   };
-  const state = { rateLimited: false, repos: [], reposStatus: "loading", open: new Set(["portfolio"]), tabs: [], active: null, activity: { status: "loading", buckets: [] }, certFocus: null, langs: {} };
+  const state = { snapshot: null, source: "live", rateLimited: false, repos: [], reposStatus: "loading", open: new Set(["portfolio"]), tabs: [], active: null, activity: { status: "loading", buckets: [] }, certFocus: null, langs: {} };
 
   /* ---------- Certificate helpers ---------- */
   const fmtDate = iso => new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -154,13 +161,26 @@ const DATA = {
   };
   const langColor = n => LANG_COLORS[n] || "#8b949e";
   const fmtBytes = b => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
-  const langCacheGet = r => { try { const c = JSON.parse(localStorage.getItem("dsv-lang-v1:" + r.name)); if (c && c.p === r.pushed_at && Date.now() - c.t < DATA.languageCacheMinutes * 60000) return c.d; } catch (e) { /* no cache */ } return null; };
+  const langCacheRead = r => { try { return JSON.parse(localStorage.getItem("dsv-lang-v1:" + r.name)); } catch (e) { return null; } };
+  /* Valid while the repository has not been pushed to since. Right after a push it is only trusted briefly (GitHub can take a few minutes to update its figures) */
+  const langCacheGet = r => {
+    const c = langCacheRead(r);
+    if (!c || c.p !== r.pushed_at) return null;
+    const settled = c.t - Date.parse(r.pushed_at) > 15 * 60000;
+    return settled || Date.now() - c.t < DATA.languageCacheMinutes * 60000 ? c.d : null;
+  };
+  const langCacheStale = r => { const c = langCacheRead(r); return c && c.d || null; };   /* any saved breakdown, however old: better than none when GitHub is unavailable */
   const langCacheSet = (r, d) => { try { localStorage.setItem("dsv-lang-v1:" + r.name, JSON.stringify({ p: r.pushed_at, t: Date.now(), d })); } catch (e) { /* storage unavailable */ } };
 
   /* Every language of the repository: one stacked bar plus a legend with each percentage (GitHub style) */
   function langHtml(r) {
     const d = state.langs[r.name];
-    if (!d) return `<span class="lang-fallback">${esc(r.language || "Mixed")}</span>`;   /* shown until the full breakdown has loaded */
+    if (!d) {   /* the full breakdown is not available (yet): the same bar, in the main language's colour and without a percentage */
+      if (!r.language) return `<span class="lang-fallback">No language data</span>`;
+      const c = langColor(r.language), tip = `${r.language} (main language; the full breakdown could not be loaded)`;
+      return `<span class="lang-bar" role="img" aria-label="${esc("Main language: " + r.language)}"><span class="lang-seg" style="flex-grow:1;background:${c}" title="${esc(tip)}"></span></span>
+        <span class="lang-legend"><span class="lang-item" title="${esc(tip)}"><i style="background:${c}"></i><b>${esc(r.language)}</b></span></span>`;
+    }
     const total = Object.values(d).reduce((a, b) => a + b, 0);
     if (!total) return `<span class="lang-fallback">No code detected</span>`;
     const list = Object.entries(d).sort((a, b) => b[1] - a[1]).map(([name, bytes]) => {
@@ -183,14 +203,19 @@ const DATA = {
     await Promise.allSettled(state.repos.filter(r => wanted.has(r.name) && !langRequested.has(r.name)).map(async r => {
       langRequested.add(r.name);
       try {
-        let d = langCacheGet(r);
+        let d = snapCurrent(r) ? snapLangs(r.name) : null;
+        if (!d) d = langCacheGet(r);
         if (!d) {
           const res = await gh(`https://api.github.com/repos/${DATA.githubUser}/${encodeURIComponent(r.name)}/languages`);
           if (!res.ok) throw new Error(res.status);
           d = await res.json(); langCacheSet(r, d);
         }
         state.langs[r.name] = d; fillLangs();
-      } catch (e) { langRequested.delete(r.name); throw e; }   /* the main language stays shown; a later page view tries again */
+      } catch (e) {
+        const old = snapLangs(r.name) || langCacheStale(r);   /* GitHub unavailable: an older saved breakdown is better than none */
+        if (old) { state.langs[r.name] = old; fillLangs(); }
+        else { langRequested.delete(r.name); throw e; }      /* the main language stays shown; a later page view tries again */
+      }
     }));
   }
 
@@ -294,11 +319,12 @@ const DATA = {
   /* Commits are read straight from each public repository, so they appear as soon as they are pushed (the public events feed can lag by hours) */
   async function loadActivity() {
     if (state.reposStatus !== "ok") throw new Error("Repositories unavailable");
-    const cached = cacheGet("dsv-commits-v1"); if (cached) return cached;
+    const cached = cacheGet("dsv-commits-v2"); if (cached) return cached;
     const days = Math.max(2, Math.min(90, DATA.activity.days));
     const since = addDays(new Date(tzKey(new Date()) + "T00:00:00Z"), -days).toISOString(); /* a day of margin; the buckets do the exact cut */
-    const active = state.rawRepos.filter(r => new Date(r.pushed_at) >= new Date(since));
-    const results = await Promise.allSettled(active.map(async r => {
+    const snap = state.snapshot, live = state.source === "live";
+    const snapCommits = n => snap ? snap.commits.filter(c => c.repo === n) : [];
+    const liveCommits = async r => {
       const out = [];
       for (let page = 1; page <= 3; page++) {
         const res = await gh(`https://api.github.com/repos/${DATA.githubUser}/${encodeURIComponent(r.name)}/commits?author=${DATA.githubUser}&since=${since}&per_page=100&page=${page}`);
@@ -309,10 +335,23 @@ const DATA = {
         if (batch.length < 100) break;
       }
       return out;
+    };
+    const active = state.rawRepos.filter(r => new Date(r.pushed_at) >= new Date(since));
+    const results = await Promise.allSettled(active.map(async r => {
+      if (snapCurrent(r)) return snapCommits(r.name);    /* the snapshot already holds everything up to the latest push */
+      try { return await liveCommits(r); }
+      catch (e) { if (snapRepo(r.name)) return snapCommits(r.name); throw e; }
     }));
-    if (active.length && results.every(x => x.status === "rejected")) throw new Error("Commits unavailable");
+    if (active.length && results.every(x => x.status === "rejected")) {
+      let saved = null; try { saved = JSON.parse(localStorage.getItem("dsv-commits-saved")); } catch (e) { /* none */ }
+      if (saved && Array.isArray(saved.data)) return saved;   /* the last good result, with its own time */
+      throw new Error("Commits unavailable");
+    }
     const commits = results.flatMap(x => x.status === "fulfilled" ? x.value : []);
-    return results.some(x => x.status === "rejected") ? { t: Date.now(), data: commits } : cacheSet("dsv-commits-v1", commits);
+    const t = live || !snap ? Date.now() : Date.parse(snap.generatedAt);
+    const complete = !results.some(x => x.status === "rejected");
+    if (complete) { try { localStorage.setItem("dsv-commits-saved", JSON.stringify({ t, data: commits })); } catch (e) { /* storage unavailable */ } }
+    return complete && live ? cacheSet("dsv-commits-v2", commits) : { t, data: commits };
   }
 
   /* ---------- Views ---------- */
@@ -591,17 +630,27 @@ const DATA = {
   open(start && resolve(start) ? start : "about");
   if (mobile()) setExplorer(false);
 
-  /* Repositories are cached briefly (see cacheMinutes) to stay within GitHub's anonymous rate limit */
+  /* Where the data comes from, in order:
+     1. the snapshot file (same origin, so GitHub's request limit does not apply)
+     2. one live GitHub request, which tops it up for anything pushed since the snapshot was made
+     3. if GitHub refuses or is down: the snapshot alone, or else the last copy saved on this device */
+  const snapshotP = (location.protocol === "file:" ? Promise.resolve(null) : fetch(DATA.snapshotFile, { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null))
+    .then(s => s && Array.isArray(s.repos) && s.commits && s.languages ? s : null);
   const cached = cacheGet("dsv-repos-v2");
-  const load = cached ? Promise.resolve(cached.data)
+  const liveRepos = () => cached ? Promise.resolve(cached.data)
     : gh(`https://api.github.com/users/${DATA.githubUser}/repos?per_page=100&sort=pushed`)
         .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-        .then(repos => { cacheSet("dsv-repos-v2", repos); try { localStorage.setItem("dsv-repos-saved", JSON.stringify(repos)); } catch (e) { /* storage unavailable */ } return repos; })
-        .catch(err => {   /* GitHub refused (for example the hourly limit): use the last copy that was saved on this device */
-          let saved = null; try { saved = JSON.parse(localStorage.getItem("dsv-repos-saved")); } catch (e) { /* none */ }
-          if (Array.isArray(saved) && saved.length) { state.usingSavedCopy = true; return saved; }
-          throw err;
-        });
+        .then(repos => { cacheSet("dsv-repos-v2", repos); try { localStorage.setItem("dsv-repos-saved", JSON.stringify(repos)); } catch (e) { /* storage unavailable */ } return repos; });
+  const load = snapshotP.then(snap => {
+    state.snapshot = snap;
+    return liveRepos().catch(err => {
+      console.warn("Live GitHub data unavailable:", err);
+      if (snap) { state.source = "snapshot"; return snap.repos; }
+      let saved = null; try { saved = JSON.parse(localStorage.getItem("dsv-repos-saved")); } catch (e) { /* none */ }
+      if (Array.isArray(saved) && saved.length) { state.source = "saved"; return saved; }
+      throw err;
+    });
+  });
 
   /* The blue status bar shows when the portfolio repository was last pushed to */
   const siteUpdated = iso => {
@@ -617,7 +666,10 @@ const DATA = {
       state.repos = repos.filter(r => !r.fork && (DATA.showPortfolioRepo || r.name.toLowerCase() !== `${DATA.githubUser.toLowerCase()}.github.io`))
         .sort((a, b) => new Date(b.pushed_at) - new Date(a.pushed_at));
       state.reposStatus = "ok";
-      $("#statusRepos").textContent = (site ? siteUpdated(site.pushed_at) : `${plural(state.repos.length, "public repository", "public repositories")} loaded from GitHub`) + (state.usingSavedCopy ? " (saved copy: GitHub's hourly limit was reached)" : "");
+      state.repos.forEach(r => { const l = snapCurrent(r) && snapLangs(r.name); if (l) state.langs[r.name] = l; });   /* no flash: the full bars are there on the first draw */
+      const saved = state.snapshot && new Date(state.snapshot.generatedAt).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: DATA.timezone });
+      const note = state.source === "snapshot" ? ` (live GitHub unavailable; data saved ${saved})` : state.source === "saved" ? " (live GitHub unavailable; saved copy)" : "";
+      $("#statusRepos").textContent = (site ? siteUpdated(site.pushed_at) : `${plural(state.repos.length, "public repository", "public repositories")} loaded from GitHub`) + note;
     })
     .catch(err => { console.error("GitHub API error:", err); state.reposStatus = "error"; $("#statusRepos").textContent = state.rateLimited ? "GitHub's hourly request limit was reached; please try again later" : "GitHub repositories unavailable"; })
     .finally(() => { const s = location.hash.slice(1); if (s.startsWith("projects/") && !state.tabs.includes(s)) open(s); else render(); });

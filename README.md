@@ -19,6 +19,10 @@ DSVerster.github.io
 │   README.md
 │   stylesheet.css
 │
+├───.github
+│   └───workflows
+│           update-github-data.yml
+│
 ├───certificates
 │       Great Learning Intro to Cyber Security.pdf
 │       MATLAB App Building Onramp certificate.pdf
@@ -28,6 +32,12 @@ DSVerster.github.io
 │       MATLAB Statistic Onramp certificate.pdf
 │       MATLAB Visualization in MATLAB certificate.pdf
 │       Neo4j & GenerativeAI Fundamentals Certificate _ GraphAcademy.pdf
+│
+├───data
+│       github.json            (created and refreshed by the GitHub Action)
+│
+├───scripts
+│       fetch-github-data.mjs
 │
 └───media
         CirriculumVitae_Me.jpg
@@ -39,6 +49,16 @@ DSVerster.github.io
         NWU-Logo-SW.png
         NWU-Logo-SWIcon.png
 ```
+
+## Where the GitHub data comes from
+
+A visitor's browser may only make 60 anonymous GitHub requests per hour, so the site does not depend on that. In order:
+
+1. **Snapshot file (`data/github.json`).** The GitHub Action in `.github/workflows/update-github-data.yml` runs every 15 minutes (and on every push to this repository, and on demand from the Actions tab). It uses the built-in `GITHUB_TOKEN` to collect the public repositories, every project's language breakdown and the last 90 days of commits, and saves them to `data/github.json`, only when something changed. The site reads this file first, so there is no request limit and no dependence on the GitHub API being up.
+2. **Live top-up.** The site then makes one live request for the repository list. Only for a repository pushed to *after* the snapshot was made does it fetch that repository's commits and languages live, so a fresh push shows immediately.
+3. **Fallbacks.** If GitHub refuses (HTTP 403, the hourly limit) or is down, the site sends no more requests and shows the snapshot, or failing that the last repository list saved in the browser. The blue status bar says when this happens.
+
+**One-off set-up:** push the `.github`, `scripts` and `data` folders, open the repository's **Actions** tab and run **Update GitHub data** once with **Run workflow**. If it cannot save the file, go to Settings, Actions, General, Workflow permissions and choose **Read and write permissions**.
 
 ## Updating the content
 
@@ -54,4 +74,4 @@ All content lives in the `DATA` block at the top of `Jscript.js`.
 - **Explorer order:** the tree is sorted like a normal file directory, with folders first and then files, each in alphabetical order. The pages themselves keep their own order (certificates newest first, projects most recently pushed first).
 - **Certificates in the explorer:** `certificatesInEducation` in `Jscript.js` places Certificates as a sub-folder of Education (`true`) or as its own top-level folder (`false`).
 - **Status bar:** the blue bar shows when the portfolio repository was last pushed to (dd/mm/yyyy, and the number of days ago).
-- **Refresh interval:** `cacheMinutes` in `Jscript.js` sets how long GitHub data is reused before it is fetched again (GitHub allows 60 anonymous requests per hour). If GitHub does refuse a request (HTTP 403, the hourly limit), the site stops asking, shows the last copy of the repository list saved in the browser, and says so in the status bar. Project languages are only requested for the projects a page actually shows.
+- **Refresh interval:** `cacheMinutes` in `Jscript.js` sets how long GitHub data is reused before it is fetched again (GitHub allows 60 anonymous requests per hour).
