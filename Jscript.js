@@ -15,7 +15,7 @@ const DATA = {
   activity: { days: 30, labelEvery: 2, series: ["repos", "commits"] },
 
   /* How many projects and certificates the About.md page shows before the "View all" button (use 0 to show none) */
-  aboutLimits: { projects: 6, certificates: 3 },
+  aboutLimits: { projects: 6, certificates: 4 },
   email: "denzelverster@gmail.com",
   linkedin: "https://www.linkedin.com/in/denzel-verster-642373375/",
   cv: "media/DS Verster Cirriculum-Vitae.pdf",
@@ -311,7 +311,7 @@ const DATA = {
         <a class="btn" href="${esc(DATA.cv)}" download>Download CV (PDF)</a>
         <button class="btn" data-scroll="contact-card">Contact me</button></div></div>
       <h2>About me</h2><p>${esc(DATA.summary)}</p></div>
-      <aside class="about-side"><h2>Activity</h2><div class="activity-card" id="activity">${activityHtml()}</div></aside>
+      <aside class="about-side"><h2>Public Github Activity</h2><div class="activity-card" id="activity">${activityHtml()}</div></aside>
       <div class="about-rest">
       <h2>Education</h2>${staticCards(DATA.education)}
       <h2>Experience</h2>${DATA.experience.length ? staticCards(DATA.experience) : '<p class="placeholder">I will add further experience here as I gain it.</p>'}
