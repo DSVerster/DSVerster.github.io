@@ -46,7 +46,7 @@ All content lives in the `DATA` block at the top of `Jscript.js`.
 
 - **Certificates:** save the PDF in `certificates/`, then add one object to `DATA.certificates`. The `group` field files it under a provider folder, and the site sorts everything newest first.
 - **Experience and education:** add an object to the matching array.
-- **Projects:** these load automatically from my public GitHub repositories.
+- **Projects:** these load automatically from my public GitHub repositories, including this portfolio's own repository. `showPortfolioRepo` in `Jscript.js` hides that one if set to `false`.
 - **Activity graph:** the About page charts my public GitHub activity per day (the last 30 days by default). `activity: { days, labelEvery }` in `Jscript.js` sets the period and how often a date label is shown. Both lines, repositories worked on (green) and commits (blue), are calculated from the commits in my public repositories, read directly from each repository, so they appear as soon as they are pushed and always agree. Days are counted in the time zone set by `timezone` in `Jscript.js`. Only public repositories are shown; private activity never appears. The vertical scale fits the busiest day automatically, and the graph is hidden on portrait screens.
 - **About page limits:** `aboutLimits: { projects, certificates }` in `Jscript.js` sets how many projects and certificates the About page shows.
 - **Animation speeds:** `--orbit-time` (the circling dots) and `--graph-time` (the graph drawing itself) are at the top of the motion section in `stylesheet.css`.

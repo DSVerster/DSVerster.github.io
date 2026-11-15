@@ -19,6 +19,9 @@ const DATA = {
   /* How long (in minutes) GitHub data is reused before it is fetched again. GitHub allows 60 anonymous requests per hour. */
   cacheMinutes: 2,
 
+  /* Show this portfolio's own repository (DSVerster.github.io) in the Projects list (false = hide it) */
+  showPortfolioRepo: true,
+
   /* How many projects and certificates the About.md page shows before the "View all" button (use 0 to show none) */
   aboutLimits: { projects: 5, certificates: 5 },
 
@@ -527,7 +530,7 @@ const DATA = {
     .then(repos => {
       state.rawRepos = repos.filter(r => !r.fork);
       const site = repos.find(r => r.name.toLowerCase() === `${DATA.githubUser.toLowerCase()}.github.io`);
-      state.repos = repos.filter(r => !r.fork && r.name.toLowerCase() !== `${DATA.githubUser.toLowerCase()}.github.io`)
+      state.repos = repos.filter(r => !r.fork && (DATA.showPortfolioRepo || r.name.toLowerCase() !== `${DATA.githubUser.toLowerCase()}.github.io`))
         .sort((a, b) => new Date(b.pushed_at) - new Date(a.pushed_at));
       state.reposStatus = "ok";
       $("#statusRepos").textContent = site ? siteUpdated(site.pushed_at) : `${plural(state.repos.length, "public repository", "public repositories")} loaded from GitHub`;
