@@ -8,7 +8,7 @@
    ========================================================================== */
 const DATA = {
   name: "Denzel Stockenström Verster",
-  role: "BSc Information Technology Graduate | BSc Honours Student in Computer Science and Information Technology",
+  role: "BSc Information Technology Graduate | Honours Student in Computer Science and IT",
   githubUser: "DSVerster",
   /* Time zone used to decide which day a commit belongs to, and to show dates (an IANA name, for example "Africa/Johannesburg") */
   timezone: "Africa/Johannesburg",
@@ -17,7 +17,7 @@ const DATA = {
   activity: { days: 30, labelEvery: 2 },
 
   /* How long (in minutes) GitHub data is reused before it is fetched again. GitHub allows 60 anonymous requests per hour. */
-  cacheMinutes: 2,
+  cacheMinutes: 10,
 
   /* How long (in minutes) a project's language breakdown is reused. It is also refreshed whenever that repository is pushed to.
      Each repository costs one GitHub request per refresh. */
@@ -35,7 +35,7 @@ const DATA = {
   linkedin: "https://www.linkedin.com/in/denzel-verster-642373375/",
   cv: "media/DS Verster Cirriculum-Vitae.pdf",
   photo: "media/CirriculumVitae_Me.jpg",
-  summary: "I am a Honours Computer Science and Information Technology graduate from North-West University, and I am now studying towards an Masters degree in Computer Science and Information Technology. I enjoy programming, computer hardware and hands-on projects, particularly Raspberry Pi systems (or somehting similar like; microcontrollers), and I am comfortable working across several programming languages, networking and problem-solving. I am looking for the opportunity to apply what I have learnt in a real working environment, and I value every chance to keep learning alongside other people.",
+  summary: "I am an Information Technology graduate from North-West University, and I am now studying towards an Honours degree in Computer Science and Information Technology. I enjoy programming, computer hardware and hands-on projects, particularly Raspberry Pi systems, and I am comfortable working across several programming languages, networking and problem-solving. I am looking for the opportunity to apply what I have learnt in a real working environment, and I value every chance to keep learning alongside other people.",
 
   education: [
     { id: "nwu-honours", title: "BSc Honours Computer Science and Information Technology", org: "North-West University", logo: "media/NWU-Logo-SWIcon.png",
@@ -119,7 +119,14 @@ const DATA = {
   /* Short-lived cache: data is reused for DATA.cacheMinutes, then fetched again */
   const cacheGet = key => { try { const c = JSON.parse(sessionStorage.getItem(key)); if (c && Date.now() - c.t < DATA.cacheMinutes * 60000) return c; } catch (e) { /* no cache */ } return null; };
   const cacheSet = (key, data) => { const c = { t: Date.now(), data }; try { sessionStorage.setItem(key, JSON.stringify(c)); } catch (e) { /* storage unavailable */ } return c; };
-  const state = { repos: [], reposStatus: "loading", open: new Set(["portfolio"]), tabs: [], active: null, activity: { status: "loading", buckets: [] }, certFocus: null, langs: {} };
+  /* All GitHub requests go through here. Once GitHub answers 403 or 429 (hourly limit reached), no further requests are sent until the page is reloaded */
+  const gh = async url => {
+    if (state.rateLimited) throw new Error("GitHub rate limit reached");
+    const res = await fetch(url);
+    if (res.status === 403 || res.status === 429) state.rateLimited = true;
+    return res;
+  };
+  const state = { rateLimited: false, repos: [], reposStatus: "loading", open: new Set(["portfolio"]), tabs: [], active: null, activity: { status: "loading", buckets: [] }, certFocus: null, langs: {} };
 
   /* ---------- Certificate helpers ---------- */
   const fmtDate = iso => new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -169,16 +176,21 @@ const DATA = {
     const r = state.repos.find(x => x.name === el.dataset.langRepo);
     if (r && state.langs[r.name]) { el.innerHTML = langHtml(r); el.setAttribute("data-done", ""); }
   });
+  const langRequested = new Set();
   async function loadLanguages() {
     if (state.reposStatus !== "ok") return;
-    await Promise.allSettled(state.repos.map(async r => {
-      let d = langCacheGet(r);
-      if (!d) {
-        const res = await fetch(`https://api.github.com/repos/${DATA.githubUser}/${encodeURIComponent(r.name)}/languages`);
-        if (!res.ok) throw new Error(res.status);
-        d = await res.json(); langCacheSet(r, d);
-      }
-      state.langs[r.name] = d; fillLangs();
+    const wanted = new Set([...document.querySelectorAll("[data-lang-repo]:not([data-done])")].map(el => el.dataset.langRepo));
+    await Promise.allSettled(state.repos.filter(r => wanted.has(r.name) && !langRequested.has(r.name)).map(async r => {
+      langRequested.add(r.name);
+      try {
+        let d = langCacheGet(r);
+        if (!d) {
+          const res = await gh(`https://api.github.com/repos/${DATA.githubUser}/${encodeURIComponent(r.name)}/languages`);
+          if (!res.ok) throw new Error(res.status);
+          d = await res.json(); langCacheSet(r, d);
+        }
+        state.langs[r.name] = d; fillLangs();
+      } catch (e) { langRequested.delete(r.name); throw e; }   /* the main language stays shown; a later page view tries again */
     }));
   }
 
@@ -265,10 +277,10 @@ const DATA = {
     });
     const total = b.reduce((a, x) => a + x.commits, 0), active = b.filter(x => x.commits > 0 || x.repos > 0).length;
     const summary = (active ? `${plural(total, "commit", "commits")} across ${plural(b.repoCount || 0, "repository", "repositories")}, active on ${active} of ${b.length} days` : "No activity in this period") + " · public activity only" + (fetchedAt ? ` · updated ${new Date(fetchedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: DATA.timezone })}` : "");
-    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="GitHub activity: ${esc(summary)}">${g}</svg>
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Public GitHub activity: ${esc(summary)}">${g}</svg>
       <ul class="legend">${ser.map(s => `<li><i class="sw ${s.cls === "s-a" ? "a" : "b"}"></i>${esc(s.name)}</li>`).join("")}</ul>
       <p class="meta note">${esc(summary)}</p>
-      <table class="sr"><caption>GitHub activity by date</caption><tr><th>Date</th>${ser.map(s => `<th>${esc(s.name)}</th>`).join("")}</tr>${b.map(x => `<tr><td>${esc(shortDate(x.end))}</td>${ser.map(s => `<td>${x[s.key]}</td>`).join("")}</tr>`).join("")}</table>`;
+      <table class="sr"><caption>Public GitHub activity by date</caption><tr><th>Date</th>${ser.map(s => `<th>${esc(s.name)}</th>`).join("")}</tr>${b.map(x => `<tr><td>${esc(shortDate(x.end))}</td>${ser.map(s => `<td>${x[s.key]}</td>`).join("")}</tr>`).join("")}</table>`;
   }
 
   const activityHtml = () => {
@@ -289,7 +301,7 @@ const DATA = {
     const results = await Promise.allSettled(active.map(async r => {
       const out = [];
       for (let page = 1; page <= 3; page++) {
-        const res = await fetch(`https://api.github.com/repos/${DATA.githubUser}/${encodeURIComponent(r.name)}/commits?author=${DATA.githubUser}&since=${since}&per_page=100&page=${page}`);
+        const res = await gh(`https://api.github.com/repos/${DATA.githubUser}/${encodeURIComponent(r.name)}/commits?author=${DATA.githubUser}&since=${since}&per_page=100&page=${page}`);
         if (res.status === 409) return out;              /* an empty repository */
         if (!res.ok) throw new Error(res.status);
         const batch = await res.json();
@@ -386,7 +398,7 @@ const DATA = {
         <a class="btn" href="${esc(DATA.cv)}" download>Download CV (PDF)</a>
         <button class="btn" data-scroll="contact-card">Contact me</button></div></div>
       <h2>About me</h2><p>${esc(DATA.summary)}</p></div>
-      <aside class="about-side"><h2>GitHub Activity</h2><div class="activity-card" id="activity">${activityHtml()}</div></aside>
+      <aside class="about-side"><h2>Public GitHub Activity</h2><div class="activity-card" id="activity">${activityHtml()}</div></aside>
       <div class="about-rest">
       <h2>Education</h2>${staticCards(DATA.education)}
       <h2>Experience</h2>${DATA.experience.length ? staticCards(DATA.experience) : '<p class="placeholder">I will add further experience here as I gain it.</p>'}
@@ -457,6 +469,7 @@ const DATA = {
     pane.scrollTop = 0;
     $("#crumbs").textContent = "portfolio > " + ((DATA.certificatesInEducation && state.active.split("/")[0] === "certificates") ? "education/" : "") .concat(state.active).replace(/\//g, " > ");
     renderTree();
+    loadLanguages();
   }
 
   /* ---------- Explorer tree ---------- */
@@ -581,9 +594,14 @@ const DATA = {
   /* Repositories are cached briefly (see cacheMinutes) to stay within GitHub's anonymous rate limit */
   const cached = cacheGet("dsv-repos-v2");
   const load = cached ? Promise.resolve(cached.data)
-    : fetch(`https://api.github.com/users/${DATA.githubUser}/repos?per_page=100&sort=pushed`)
+    : gh(`https://api.github.com/users/${DATA.githubUser}/repos?per_page=100&sort=pushed`)
         .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-        .then(repos => { cacheSet("dsv-repos-v2", repos); return repos; });
+        .then(repos => { cacheSet("dsv-repos-v2", repos); try { localStorage.setItem("dsv-repos-saved", JSON.stringify(repos)); } catch (e) { /* storage unavailable */ } return repos; })
+        .catch(err => {   /* GitHub refused (for example the hourly limit): use the last copy that was saved on this device */
+          let saved = null; try { saved = JSON.parse(localStorage.getItem("dsv-repos-saved")); } catch (e) { /* none */ }
+          if (Array.isArray(saved) && saved.length) { state.usingSavedCopy = true; return saved; }
+          throw err;
+        });
 
   /* The blue status bar shows when the portfolio repository was last pushed to */
   const siteUpdated = iso => {
@@ -599,9 +617,9 @@ const DATA = {
       state.repos = repos.filter(r => !r.fork && (DATA.showPortfolioRepo || r.name.toLowerCase() !== `${DATA.githubUser.toLowerCase()}.github.io`))
         .sort((a, b) => new Date(b.pushed_at) - new Date(a.pushed_at));
       state.reposStatus = "ok";
-      $("#statusRepos").textContent = site ? siteUpdated(site.pushed_at) : `${plural(state.repos.length, "public repository", "public repositories")} loaded from GitHub`;
+      $("#statusRepos").textContent = (site ? siteUpdated(site.pushed_at) : `${plural(state.repos.length, "public repository", "public repositories")} loaded from GitHub`) + (state.usingSavedCopy ? " (saved copy: GitHub's hourly limit was reached)" : "");
     })
-    .catch(err => { console.error("GitHub API error:", err); state.reposStatus = "error"; $("#statusRepos").textContent = "GitHub repositories unavailable"; })
+    .catch(err => { console.error("GitHub API error:", err); state.reposStatus = "error"; $("#statusRepos").textContent = state.rateLimited ? "GitHub's hourly request limit was reached; please try again later" : "GitHub repositories unavailable"; })
     .finally(() => { const s = location.hash.slice(1); if (s.startsWith("projects/") && !state.tabs.includes(s)) open(s); else render(); });
 
   /* Full language breakdowns arrive after the repositories and are filled in without redrawing the page */
