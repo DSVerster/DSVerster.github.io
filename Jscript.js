@@ -17,6 +17,7 @@ const DATA = {
      Both lines are calculated from the commits in my public repositories, so they always agree with each other. */
   activity: {
     defaultRange: 0,
+    invaders: true,                 /* the small space-invader game in the empty space of the activity box (false removes it) */
     ranges: [
       { label: "30 days",  days: 30,  step: 1,  labelEvery: 2 },
       { label: "60 days",  days: 60,  step: 1,  labelEvery: 5 },
@@ -410,8 +411,163 @@ const DATA = {
     if (a.status === "loading") body = a.lastChart ? `<div class="is-loading">${a.lastChart}</div>` : `<p class="placeholder">Loading activity&hellip;</p>`;
     else if (a.status === "error") body = `<p class="placeholder">My activity could not be loaded at this time. Please view it directly on <a href="https://github.com/${DATA.githubUser}" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>`;
     else body = a.chart;
-    return sub + body + rangeBar();
+    return sub + body + invZone() + rangeBar();
   };
+
+  /* ---------- Space invader: a small game in the empty space of the activity box ----------
+     The ship is ready as soon as the box is drawn. Left and right arrows move it, the up arrow shoots (and starts the game), and every shot
+     erodes the text and graph above, tile by tile. R restores everything, and so does switching the time range. It is only a drawing laid over
+     the box: the real text and graph underneath are never changed, so screen readers and copying are unaffected. */
+  const SHIP = ["......X......", ".....XXX.....", ".XXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX"];
+  const PX = 4, SHIP_W = SHIP[0].length * PX, SHIP_H = SHIP.length * PX;          /* the sprite: 13 x 6 blocks of 4 pixels */
+  const TILE = 10, SHIP_SPEED = 300, BULLET_SPEED = 560, FIRE_DELAY = 0.24;       /* tile size (px), ship speed (px/s), bullet speed (px/s), seconds between shots */
+  const INV_HINT = "&larr; &rarr; move &middot; &uarr; shoot";
+  const invZone = () => DATA.activity.invaders === false ? "" : `<div class="invader-zone" id="invader" aria-hidden="true"><span class="invader-hint">${INV_HINT}</span></div>`;
+  const inv = { card: null, cv: null, ctx: null, scar: null, sctx: null, ro: null, raf: 0, last: 0, dpr: 1, g: null, col: null, ratio: null, x: 0, cool: 0,
+    held: { l: false, r: false, u: false }, bullets: [], parts: [], dead: new Set(), content: new Set(), hit: 0, started: false, pct: -1 };
+  const tileKey = (c, r) => r * 4096 + c;
+  const invShipY = () => Math.max(inv.g.zy, inv.g.zy + inv.g.zh - SHIP_H - 6);
+
+  /* Where the text lines, the drawn graph lines and dots and the legend swatches are, measured relative to the box, so shots only hit things that are really there */
+  function invTargets() {
+    const c = inv.card, cr = c.getBoundingClientRect(), ox = cr.left + c.clientLeft, oy = cr.top + c.clientTop, out = [];
+    const add = r => { if (r.width > 1 && r.height > 1) out.push({ x: r.left - ox, y: r.top - oy, w: r.width, h: r.height }); };
+    const walker = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!n.nodeValue.trim() || n.parentElement.closest(".range-bar, .invader-zone, .sr")) continue;
+      const rg = document.createRange(); rg.selectNodeContents(n); [...rg.getClientRects()].forEach(add);
+    }
+    c.querySelectorAll(".sw").forEach(el => add(el.getBoundingClientRect()));
+    c.querySelectorAll("svg.chart path, svg.chart line, svg.chart circle").forEach(el => {   /* the drawn lines and dots, measured point by point, so the empty parts of the graph are not targets */
+      const m = el.getScreenCTM(); if (!m || !el.getTotalLength) return;
+      const len = el.getTotalLength();
+      for (let d = 0; d <= len; d += 4) { const p = el.getPointAtLength(d); out.push({ x: m.a * p.x + m.c * p.y + m.e - ox - 1, y: m.b * p.x + m.d * p.y + m.f - oy - 1, w: 2, h: 2 }); }
+    });
+    return out;
+  }
+
+  function invLayout() {
+    const c = inv.card, z = $("#invader");
+    if (!c || !z || !c.isConnected) return;
+    const cw = c.clientWidth, ch = c.clientHeight; if (!cw || !ch) return;
+    const cr = c.getBoundingClientRect(), zr = z.getBoundingClientRect();
+    inv.dpr = Math.min(2, window.devicePixelRatio || 1);
+    inv.g = { cw, ch, zy: zr.top - cr.top - c.clientTop, zh: zr.height };
+    [inv.cv, inv.scar].forEach(el => { el.width = Math.round(cw * inv.dpr); el.height = Math.round(ch * inv.dpr); });
+    inv.sctx.setTransform(inv.dpr, 0, 0, inv.dpr, 0, 0); inv.sctx.fillStyle = inv.col.bg;
+    inv.content = new Set();
+    invTargets().forEach(t => { for (let r = Math.floor(t.y / TILE); r <= Math.floor((t.y + t.h) / TILE); r++) for (let k = Math.floor(t.x / TILE); k <= Math.floor((t.x + t.w) / TILE); k++) if (r >= 0 && k >= 0) inv.content.add(tileKey(k, r)); });
+    inv.hit = 0;
+    inv.dead.forEach(key => { if (inv.content.has(key)) inv.hit++; inv.sctx.fillRect((key % 4096) * TILE, Math.floor(key / 4096) * TILE, TILE, TILE); });
+    inv.x = inv.ratio == null ? (cw - SHIP_W) / 2 : inv.ratio * (cw - SHIP_W);
+    inv.pct = -1; invDraw(); invHint();
+  }
+
+  function invDraw() {
+    const ctx = inv.ctx, g = inv.g; if (!ctx || !g) return;
+    ctx.setTransform(inv.dpr, 0, 0, inv.dpr, 0, 0);
+    ctx.clearRect(0, 0, g.cw, g.ch);
+    ctx.drawImage(inv.scar, 0, 0, g.cw, g.ch);                                   /* the erased tiles */
+    const y0 = invShipY(), x0 = Math.round(inv.x);
+    ctx.fillStyle = inv.col.ship;
+    SHIP.forEach((row, r) => { for (let k = 0; k < row.length; k++) if (row[k] === "X") ctx.fillRect(x0 + k * PX, y0 + r * PX, PX, PX); });
+    ctx.fillStyle = inv.col.bullet;
+    inv.bullets.forEach(b => ctx.fillRect(Math.round(b.x) - 1, Math.round(b.y), 2, 10));
+    inv.parts.forEach(p => { ctx.globalAlpha = Math.max(0, p.life / p.max); ctx.fillStyle = p.color; ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2); });
+    ctx.globalAlpha = 1;
+  }
+
+  function invHint() {
+    const h = $("#invader .invader-hint");
+    if (!h || !inv.started) return;
+    const pct = inv.content.size ? Math.min(100, Math.round(inv.hit / inv.content.size * 100)) : 0;
+    if (pct !== inv.pct) { inv.pct = pct; h.innerHTML = `${pct}% destroyed &middot; R restores`; }
+  }
+
+  /* A shot flies upwards in small steps (so it cannot jump over anything) and explodes on the first tile of text or graph that is still there */
+  function invMoveBullet(b, dist) {
+    for (let d = 0; d < dist; d += 4) {
+      b.y -= Math.min(4, dist - d);
+      if (b.y < -12) return false;
+      const col = Math.floor(b.x / TILE), row = Math.floor(b.y / TILE), key = tileKey(col, row);
+      if (inv.content.has(key) && !inv.dead.has(key)) { invExplode(col, row, b.x, b.y); return false; }
+    }
+    return true;
+  }
+  function invExplode(col, row, x, y) {
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if ((dr || dc) && Math.random() > 0.55) continue;                            /* a ragged crater, not a perfect square */
+      const c = col + dc, r = row + dr, key = tileKey(c, r);
+      if (c < 0 || r < 0 || r * TILE >= inv.g.zy || inv.dead.has(key)) continue;
+      inv.dead.add(key); inv.sctx.fillRect(c * TILE, r * TILE, TILE, TILE);
+      if (inv.content.has(key)) inv.hit++;
+    }
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) for (let i = 0; i < 12; i++) inv.parts.push({ x, y, vx: (Math.random() - .5) * 220, vy: -Math.random() * 160, life: .5, max: .5, color: inv.col.spark[i % inv.col.spark.length] });
+    invHint();
+  }
+
+  function invTick(ts) {
+    inv.raf = 0;
+    if (!inv.card || !inv.card.isConnected || !inv.g) return;
+    const dt = Math.min(0.05, (ts - (inv.last || ts)) / 1000); inv.last = ts;
+    const g = inv.g, dir = (inv.held.r ? 1 : 0) - (inv.held.l ? 1 : 0);
+    if (dir) { inv.x = Math.max(6, Math.min(g.cw - SHIP_W - 6, inv.x + dir * SHIP_SPEED * dt)); inv.ratio = inv.x / Math.max(1, g.cw - SHIP_W); }
+    inv.cool -= dt;
+    if (inv.held.u && inv.cool <= 0 && inv.bullets.length < 8) {
+      inv.bullets.push({ x: inv.x + SHIP_W / 2, y: invShipY() - 10 }); inv.cool = FIRE_DELAY;
+      if (!inv.started) { inv.started = true; invHint(); }                         /* the game starts with the first shot */
+    }
+    inv.bullets = inv.bullets.filter(b => invMoveBullet(b, BULLET_SPEED * dt));
+    inv.parts = inv.parts.filter(p => { p.life -= dt; p.vy += 520 * dt; p.x += p.vx * dt; p.y += p.vy * dt; return p.life > 0; });
+    invDraw();
+    if (dir || inv.held.u || inv.bullets.length || inv.parts.length) inv.raf = requestAnimationFrame(invTick); else inv.last = 0;   /* idle: no animation running */
+  }
+  const invWake = () => { if (!inv.raf && inv.card && inv.g) { inv.last = 0; inv.raf = requestAnimationFrame(invTick); } };
+
+  function invReset() {
+    inv.dead.clear(); inv.bullets = []; inv.parts = []; inv.hit = 0; inv.started = false; inv.pct = -1; inv.cool = 0;
+    if (inv.sctx && inv.g) inv.sctx.clearRect(0, 0, inv.g.cw, inv.g.ch);
+    const h = $("#invader .invader-hint"); if (h) h.innerHTML = INV_HINT;
+    invDraw();
+  }
+
+  /* Called whenever the activity box has been drawn (or redrawn with new data, which also restores the text and graph) */
+  function mountInvaders() {
+    if (inv.ro) { inv.ro.disconnect(); inv.ro = null; }
+    if (inv.raf) { cancelAnimationFrame(inv.raf); inv.raf = 0; }
+    const card = $("#activity");
+    if (!card || !$("#invader")) { inv.card = null; return; }
+    const cs = getComputedStyle(document.documentElement), v = (n, d) => cs.getPropertyValue(n).trim() || d;
+    inv.col = { ship: v("--teal", "#4ec9b0"), bullet: v("--fg", "#fff"), bg: v("--bg", "#000"), spark: [v("--teal", "#4ec9b0"), v("--blue", "#569cd6"), v("--fg", "#fff")] };
+    inv.card = card;
+    inv.cv = document.createElement("canvas"); inv.cv.className = "invader-canvas"; inv.cv.setAttribute("aria-hidden", "true");
+    card.appendChild(inv.cv);
+    inv.ctx = inv.cv.getContext("2d"); inv.scar = document.createElement("canvas"); inv.sctx = inv.scar.getContext("2d");
+    inv.dead = new Set(); inv.bullets = []; inv.parts = []; inv.hit = 0; inv.started = false; inv.pct = -1; inv.cool = 0;
+    invLayout();                                                                   /* the ship is drawn straight away, ready for play */
+    inv.ro = new ResizeObserver(invLayout); inv.ro.observe(card);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(invLayout);
+  }
+
+  /* The keys only work while the whole game area is on screen, so the arrow keys still scroll the page everywhere else */
+  const invLive = () => {
+    const z = $("#invader"), p = $("#pane");
+    if (!z || !p || !inv.card || !inv.card.isConnected) return false;
+    const r = z.getBoundingClientRect(), pr = p.getBoundingClientRect();
+    return r.width > 0 && r.top >= pr.top && r.bottom <= pr.bottom;
+  };
+  document.addEventListener("keydown", ev => {
+    const k = ev.key;
+    if (!inv.card || ev.ctrlKey || ev.metaKey || ev.altKey || (k !== "ArrowLeft" && k !== "ArrowRight" && k !== "ArrowUp" && k !== "r" && k !== "R")) return;
+    const t = ev.target; if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+    if (!invLive()) return;
+    if (k === "r" || k === "R") { if (!ev.repeat) invReset(); return; }
+    ev.preventDefault();
+    if (k === "ArrowLeft") inv.held.l = true; else if (k === "ArrowRight") inv.held.r = true; else inv.held.u = true;
+    invWake();
+  });
+  document.addEventListener("keyup", ev => { if (ev.key === "ArrowLeft") inv.held.l = false; else if (ev.key === "ArrowRight") inv.held.r = false; else if (ev.key === "ArrowUp") inv.held.u = false; });
+  window.addEventListener("blur", () => { inv.held.l = inv.held.r = inv.held.u = false; });
 
   /* Commits are read straight from each public repository, so they appear as soon as they are pushed (the public events feed can lag by hours) */
   async function loadActivity(days) {
@@ -688,6 +844,7 @@ const DATA = {
     pane.innerHTML = cur ? cur.html : "";
     pane.style.animation = "none"; void pane.offsetWidth; pane.style.animation = "";
     pane.scrollTop = 0;
+    mountInvaders();
     $("#crumbs").textContent = "portfolio > " + ((DATA.certificatesInEducation && state.active.split("/")[0] === "certificates") ? "education/" : "") .concat(state.active).replace(/\//g, " > ");
     renderTree();
     loadLanguages();
@@ -894,6 +1051,7 @@ const DATA = {
     const el = $("#activity"); if (!el) return;
     const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.range : undefined;
     el.innerHTML = activityHtml();
+    mountInvaders();
     if (focused !== undefined) { const btn = el.querySelector(`[data-range="${focused}"]`); if (btn) btn.focus(); }   /* keep keyboard focus on the button just used */
   };
   /* Loads and draws the graph for the selected range. While a new range loads, the previous graph stays visible but dimmed. */
