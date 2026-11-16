@@ -302,10 +302,10 @@ const DATA = {
     });
     const total = b.reduce((a, x) => a + x.commits, 0), active = b.filter(x => x.commits > 0 || x.repos > 0).length;
     const summary = (active ? `${plural(total, "commit", "commits")} across ${plural(b.repoCount || 0, "repository", "repositories")}, active on ${active} of ${b.length} days` : "No activity in this period") + " · public activity only" + (fetchedAt ? ` · updated ${new Date(fetchedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: DATA.timezone })}` : "");
-    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Public GitHub activity: ${esc(summary)}">${g}</svg>
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="GitHub activity: ${esc(summary)}">${g}</svg>
       <ul class="legend">${ser.map(s => `<li><i class="sw ${s.cls === "s-a" ? "a" : "b"}"></i>${esc(s.name)}</li>`).join("")}</ul>
       <p class="meta note">${esc(summary)}</p>
-      <table class="sr"><caption>Public GitHub activity by date</caption><tr><th>Date</th>${ser.map(s => `<th>${esc(s.name)}</th>`).join("")}</tr>${b.map(x => `<tr><td>${esc(shortDate(x.end))}</td>${ser.map(s => `<td>${x[s.key]}</td>`).join("")}</tr>`).join("")}</table>`;
+      <table class="sr"><caption>GitHub activity by date</caption><tr><th>Date</th>${ser.map(s => `<th>${esc(s.name)}</th>`).join("")}</tr>${b.map(x => `<tr><td>${esc(shortDate(x.end))}</td>${ser.map(s => `<td>${x[s.key]}</td>`).join("")}</tr>`).join("")}</table>`;
   }
 
   const activityHtml = () => {
@@ -437,7 +437,7 @@ const DATA = {
         <a class="btn" href="${esc(DATA.cv)}" download>Download CV (PDF)</a>
         <button class="btn" data-scroll="contact-card">Contact me</button></div></div>
       <h2>About me</h2><p>${esc(DATA.summary)}</p></div>
-      <aside class="about-side"><h2>Public GitHub Activity</h2><div class="activity-card" id="activity">${activityHtml()}</div></aside>
+      <aside class="about-side"><h2>GitHub Activity</h2><div class="activity-card" id="activity">${activityHtml()}</div></aside>
       <div class="about-rest">
       <h2>Education</h2>${staticCards(DATA.education)}
       <h2>Experience</h2>${DATA.experience.length ? staticCards(DATA.experience) : '<p class="placeholder">I will add further experience here as I gain it.</p>'}
