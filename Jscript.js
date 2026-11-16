@@ -8,7 +8,7 @@
    ========================================================================== */
 const DATA = {
   name: "Denzel Stockenström Verster",
-  role: "BSc Information Technology Graduate | Honours Student in Computer Science and IT",
+  role: "BSc Information Technology Graduate | BSc Honours Student in Computer Science and Information Technology",
   githubUser: "DSVerster",
   /* Time zone used to decide which day a commit belongs to, and to show dates (an IANA name, for example "Africa/Johannesburg") */
   timezone: "Africa/Johannesburg",
