@@ -173,28 +173,30 @@ a:hover { color: var(--teal); }
   --power-in: .45s;                /* fade-in time */
   --power-hold: .1s;               /* time it stays fully visible */
   --power-out: .45s;               /* fade-out time */
+  --power-color: var(--fg);        /* colour of the power symbol: fixed, whatever the orbit colours are (for example #ffffff or #4ec9b0) */
 }
 
 /* 1. Two dots orbiting the border of any box on hover, clockwise and opposite each other.
-      To give another kind of box the same effect, add its class to the lists below (three places). */
-:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card) { position: relative; transition: border-color .2s var(--ease), transform .2s var(--ease); }
-:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card)::before,
-:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card)::after {
+      To give another kind of box the same effect, add its class to the lists below (every :is( ) list, and the two plain lists further down).
+      Every box has it (project, certificate, contact, activity, availability and language pie boxes); only the Skills.json chips do not. */
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card, .status-card) { position: relative; transition: border-color .2s var(--ease), transform .2s var(--ease); }
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card, .status-card)::before,
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card, .status-card)::after {
   content: ""; position: absolute; top: 0; left: 0; width: 6px; height: 6px; border-radius: 50%;
   background: var(--orbit-color, var(--border)); box-shadow: 0 0 8px 1px var(--orbit-color, var(--border));   /* --orbit-color is set per box: project cards (their main language) and the language pie (the average colour) */
   offset-path: inset(0); offset-rotate: 0deg; offset-distance: 0%;
   opacity: 0; pointer-events: none; transition: opacity .35s var(--ease);
 }
-:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card):hover::before,
-:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card):hover::after,
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card, .status-card):hover::before,
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card, .status-card):hover::after,
 .card:focus-visible::before, .card:focus-visible::after {
   opacity: 1; animation: orbit var(--orbit-time) linear infinite;
 }
-:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card):hover::after,
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card, .status-card):hover::after,
 .card:focus-visible::after { animation-delay: calc(var(--orbit-time) / -2); } /* always half a lap behind */
-:is(.activity-card, .cert-group, .placeholder, .lang-pie-card):hover { border-color: var(--border); }
+:is(.activity-card, .cert-group, .placeholder, .lang-pie-card, .status-card):hover { border-color: var(--border); }
 @keyframes orbit { to { offset-distance: 100%; } }
-@supports not (offset-path: inset(0)) { .card::before, .card::after, .contact-card::before, .contact-card::after, .activity-card::before, .activity-card::after, .cert-group::before, .cert-group::after, .placeholder::before, .placeholder::after, .lang-pie-card::before, .lang-pie-card::after { display: none; } }
+@supports not (offset-path: inset(0)) { .card::before, .card::after, .contact-card::before, .contact-card::after, .activity-card::before, .activity-card::after, .cert-group::before, .cert-group::after, .placeholder::before, .placeholder::after, .lang-pie-card::before, .lang-pie-card::after, .status-card::before, .status-card::after { display: none; } }
 
 /* 2. Cards rise gently into place when a page opens (first eight only) */
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -223,24 +225,31 @@ a:hover { color: var(--teal); }
 
 @media (prefers-reduced-motion: reduce) {
   .card::before, .card::after, .contact-card::before, .contact-card::after, .activity-card::before, .activity-card::after,
-  .cert-group::before, .cert-group::after, .placeholder::before, .placeholder::after, .lang-pie-card::before, .lang-pie-card::after { display: none; }
+  .cert-group::before, .cert-group::after, .placeholder::before, .placeholder::after, .lang-pie-card::before, .lang-pie-card::after, .status-card::before, .status-card::after { display: none; }
 }
 
 /* ==========================================================================
    About page: two columns when there is room, with the activity graph beside the text
    ========================================================================== */
 .pane { container-type: inline-size; container-name: pane; }
-.about-grid { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "intro" "side" "rest"; column-gap: 40px; }
+.about-grid { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "intro" "status" "side" "rest"; column-gap: 40px; }
+.about-grid > .status-card { grid-area: status; margin-top: 22px; }
 .about-intro { grid-area: intro; }
 .about-side { grid-area: side; }
 .about-rest { grid-area: rest; }
 @container pane (min-width: 980px) {
-  .about-grid { grid-template-columns: minmax(0, 1fr) minmax(380px, 42%); grid-template-areas: "intro side" "rest rest"; align-items: start; }
+  /* The availability box (left) and the activity box (right) end on the same line: the right column spans both left rows and stretches,
+     and the activity box fills it. If the left column is the taller one, the activity box grows to meet it; if the right one is, the
+     availability box moves down to meet it. */
+  .about-grid { grid-template-columns: minmax(0, 1fr) minmax(380px, 42%); grid-template-areas: "intro side" "status side" "rest rest"; grid-template-rows: auto 1fr auto; align-items: start; }
+  .about-grid > .status-card { align-self: end; max-width: none; }
+  .about-side { align-self: stretch; display: flex; flex-direction: column; }
   .about-side h2 { margin-top: .4em; }
-  .about-side .activity-card { max-width: none; }
+  .about-side .activity-card { flex: 1; display: flex; flex-direction: column; max-width: none; }
+  .about-side .activity-card > .range-bar { margin-top: auto; padding-top: 12px; }
 }
 /* Portrait screens (taller than wide) save the space: no graph is shown or loaded */
-@media (orientation: portrait) { .about-side { display: none; } }
+@media (orientation: portrait) { .about-side, .status-card { display: none; } }
 
 .activity-card { padding: 14px 16px 12px; border: 1px solid var(--soft); max-width: 620px; }
 .activity-card > .meta { margin: 0 0 6px; text-align: right; }
@@ -308,8 +317,8 @@ a:hover { color: var(--teal); }
 @keyframes power-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes power-out { from { opacity: 1; } to { opacity: 0; } }
 /* The power symbol is drawn over the whole pie: the ring has the pie's own radius and the line runs from just above the top to the centre.
-   No background; it takes the pie's average colour (--orbit-color). The faint shadow only keeps it readable over the slices. */
-.pie-power-glyph { fill: none; stroke: var(--orbit-color, var(--fg)); stroke-width: 3.5; stroke-linecap: round; filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, .9)); }
+   No background; its colour is --power-color, whatever the orbit colours are. The faint shadow only keeps it readable over the slices. */
+.pie-power-glyph { fill: none; stroke: var(--power-color); stroke-width: 3.5; stroke-linecap: round; filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, .9)); }
 .pie-seg { animation: pie-fill calc(var(--pie-time) * var(--w)) linear both; animation-delay: calc(var(--pie-time) * var(--s)); }
 @keyframes pie-fill { from { stroke-dasharray: 0 100; } }
 .pie-legend { flex: 1; min-width: 220px; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 28px; margin: 0; padding: 0; list-style: none; }
@@ -320,3 +329,25 @@ a:hover { color: var(--teal); }
 .pie-progress { max-width: 420px; height: 8px; margin: 10px 0 4px; overflow: hidden; border-radius: 4px; background: var(--soft); }
 .pie-progress i { display: block; height: 100%; background: var(--teal); transition: width .3s var(--ease); }
 .lang-pie-card .note { margin: 14px 0 0; max-width: none; }
+
+/* ==========================================================================
+   Time-range buttons under the activity graph, and the GitHub availability strip
+   ========================================================================== */
+.range-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 12px; }
+.range-btn { padding: 3px 10px; background: none; border: 1px solid var(--soft); color: var(--dim); font: 13px var(--mono); cursor: pointer; transition: border-color .2s var(--ease), color .2s var(--ease); }
+.range-btn:hover { border-color: var(--border); color: var(--fg); }
+.range-btn.active { border-color: var(--border); color: var(--fg); box-shadow: inset 0 -2px 0 var(--border); }
+.is-loading { opacity: .4; pointer-events: none; transition: opacity .2s var(--ease); }
+
+.status-card { margin-top: 14px; padding: 10px 14px 8px; border: 1px solid var(--soft); max-width: 620px; }
+.pane .status-title { margin: 0 0 2px; font-size: .9rem; font-weight: 600; color: var(--dim); max-width: none; }
+.status-card .meta { margin: 0 0 6px; max-width: none; }
+.status-card .note { margin: 6px 0 0; font-size: .78rem; }
+.status-strip { display: flex; gap: 2px; height: 26px; }
+.sq { display: block; flex: 1 1 0; min-width: 2px; border-radius: 1.5px; background: var(--teal); opacity: .55; }
+.sq.r1 { background: var(--fn); opacity: 1; }
+.sq.r2 { background: #e8a15c; opacity: 1; }
+.sq.r3 { background: #f14c4c; opacity: 1; }
+.status-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--dim); }
+.status-legend li { display: inline-flex; align-items: center; gap: 5px; max-width: none; }
+.status-legend .sq { flex: none; width: 10px; height: 10px; }

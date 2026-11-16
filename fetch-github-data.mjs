@@ -6,7 +6,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 
 const owner = process.env.GH_OWNER;
 const token = process.env.GITHUB_TOKEN;
-const DAYS = 90;                       /* the site never shows more than 90 days */
+const DAYS = 730;                      /* the site's longest graph range is two years */
 const OUT = "data/github.json";
 if (!owner) { console.error("GH_OWNER is not set."); process.exit(1); }
 

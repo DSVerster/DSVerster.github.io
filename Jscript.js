@@ -12,9 +12,23 @@ const DATA = {
   githubUser: "DSVerster",
   /* Time zone used to decide which day a commit belongs to, and to show dates (an IANA name, for example "Africa/Johannesburg") */
   timezone: "Africa/Johannesburg",
-  /* Activity graph: window in days (one point per day, maximum 90) and how often a date label is shown.
+  /* Activity graph: the time ranges offered by the buttons beneath it (the first is shown unless "defaultRange" says otherwise).
+     days = how far back the graph reaches (maximum 730), step = days per point (1 = daily, 7 = weekly), labelEvery = a date label every N points.
      Both lines are calculated from the commits in my public repositories, so they always agree with each other. */
-  activity: { days: 30, labelEvery: 2 },
+  activity: {
+    defaultRange: 0,
+    ranges: [
+      { label: "30 days",  days: 30,  step: 1,  labelEvery: 2 },
+      { label: "60 days",  days: 60,  step: 1,  labelEvery: 5 },
+      { label: "6 months", days: 182, step: 7,  labelEvery: 4 },
+      { label: "1 year",   days: 364, step: 7,  labelEvery: 5 },
+      { label: "2 years",  days: 720, step: 30, labelEvery: 3 }
+    ]
+  },
+
+  /* GitHub availability strip (About page, beneath the activity graph): how many days it shows, and the data file that the
+     GitHub Action keeps up to date (see "GitHub availability" in the README) */
+  status: { days: 90, snapshotFile: "data/github-status.json" },
 
   /* How long (in minutes) GitHub data is reused before it is fetched again. GitHub allows 60 anonymous requests per hour. */
   cacheMinutes: 2,
@@ -133,7 +147,7 @@ const DATA = {
     if (res.status === 403 || res.status === 429) state.rateLimited = true;
     return res;
   };
-  const state = { snapshot: null, source: "live", rateLimited: false, repos: [], reposStatus: "loading", open: new Set(["portfolio"]), tabs: [], active: null, activity: { status: "loading", buckets: [] }, certFocus: null, langs: {} };
+  const state = { snapshot: null, source: "live", rateLimited: false, repos: [], reposStatus: "loading", open: new Set(["portfolio"]), tabs: [], active: null, activity: { status: "loading", buckets: [] }, range: DATA.activity.defaultRange || 0, gstatus: { status: "loading" }, certFocus: null, langs: {} };
 
   /* ---------- Certificate helpers ---------- */
   const fmtDate = iso => new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -297,20 +311,26 @@ const DATA = {
     { key: "commits", cls: "s-b", name: "Commits", one: "commit", many: "commits" }                          /* blue */
   ];
 
-  /* Both lines come from the same commits, so a day with commits always shows at least one repository */
-  function buildBuckets(commits) {
-    const n = Math.max(2, Math.min(90, DATA.activity.days));
+  /* Both lines come from the same commits, so a period with commits always shows at least one repository.
+     Each point covers cfg.step days (1 = a day, 7 = a week); the last point always ends today. */
+  function buildBuckets(commits, cfg) {
+    const step = Math.max(1, cfg.step || 1);
+    const n = Math.max(2, Math.floor(cfg.days / step));
     const base = new Date(tzKey(new Date()) + "T00:00:00Z");
-    const buckets = Array.from({ length: n }, (_, i) => ({ end: addDays(base, -(n - 1 - i)), commits: 0, repos: 0, _repos: new Set() }));
-    const byKey = new Map(buckets.map(b => [b.end.toISOString().slice(0, 10), b]));
-    const all = new Set();
+    const buckets = Array.from({ length: n }, (_, i) => {
+      const end = addDays(base, -(n - 1 - i) * step);
+      return { start: addDays(end, -(step - 1)), end, commits: 0, repos: 0, _repos: new Set() };
+    });
+    const byKey = new Map();
+    buckets.forEach(b => { for (let k = 0; k < step; k++) byKey.set(addDays(b.start, k).toISOString().slice(0, 10), b); });
+    const all = new Set(), activeDays = new Set();
     commits.forEach(c => {
-      const b = byKey.get(tzKey(c.date));
+      const key = tzKey(c.date), b = byKey.get(key);
       if (!b) return;
-      b.commits += 1; b._repos.add(c.repo); all.add(c.repo);
+      b.commits += 1; b._repos.add(c.repo); all.add(c.repo); activeDays.add(key);
     });
     buckets.forEach(b => { b.repos = b._repos.size; });
-    buckets.repoCount = all.size;
+    Object.assign(buckets, { repoCount: all.size, activeDays: activeDays.size, windowDays: n * step, step, cfg });
     return buckets;
   }
 
@@ -348,53 +368,65 @@ const DATA = {
     const iw = W - L - R, ih = H - T - B;
     const X = i => L + i * iw / (b.length - 1);
     const Y = v => T + ih - (v / yMax) * ih;
-    const every = Math.max(1, DATA.activity.labelEvery || 2);
+    const every = Math.max(1, b.cfg.labelEvery || 2);
     const labelled = i => (b.length - 1 - i) % every === 0; /* always includes the latest day */
     let g = "";
     for (let v = 0; v <= yMax; v += unit) g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${rnd(Y(v))}" y2="${rnd(Y(v))}"/><text x="${L - 8}" y="${rnd(Y(v) + 4)}" text-anchor="end">${v}</text>`;
+    const longRange = b.windowDays >= 300;               /* year ranges: the year is shown beside the first label and every January */
+    const dfmt = d => longRange ? d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : shortDate(d);
+    const range = x => b.step === 1 ? dfmt(x.end) : `${dfmt(x.start)} – ${dfmt(x.end)}`;
     let prevMonth = -1;
     b.forEach((x, i) => {
       if (!labelled(i)) return;
-      const first = x.end.getUTCMonth() !== prevMonth; prevMonth = x.end.getUTCMonth();
+      const firstEver = prevMonth === -1, first = x.end.getUTCMonth() !== prevMonth; prevMonth = x.end.getUTCMonth();
       g += `<line class="grid" x1="${rnd(X(i))}" x2="${rnd(X(i))}" y1="${T}" y2="${T + ih}"/><text x="${rnd(X(i))}" y="${T + ih + 16}" text-anchor="middle">${x.end.getUTCDate()}</text>`;
-      if (first) g += `<text x="${rnd(X(i))}" y="${T + ih + 30}" text-anchor="middle">${esc(x.end.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" }))}</text>`;
+      if (first) g += `<text x="${rnd(X(i))}" y="${T + ih + 30}" text-anchor="middle">${esc(x.end.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" }) + (longRange && (firstEver || x.end.getUTCMonth() === 0) ? " " + x.end.getUTCFullYear() : ""))}</text>`;
     });
     g += `<line class="axis" x1="${L}" x2="${L}" y1="${T}" y2="${T + ih}"/><line class="axis" x1="${L}" x2="${W - R}" y1="${T + ih}" y2="${T + ih}"/>`;
-    const dotR = b.length > 20 ? 3 : 3.5;
+    const dotR = b.length > 40 ? 2.5 : b.length > 20 ? 3 : 3.5;
     /* A zero day gets an outlined point only where the line drops from activity to zero; runs of quiet days get none */
     const showDot = (s, i) => b[i][s.key] > 0 || (i > 0 && b[i - 1][s.key] > 0);
     ser.forEach(s => {
       const pts = b.map((x, i) => [X(i), Y(x[s.key])]);
       g += `<path class="line ${s.cls}" pathLength="1" d="${smoothPath(pts)}"/>`;
-      pts.forEach((p, i) => { if (!showDot(s, i)) return; g += `<circle class="dot ${s.cls}" cx="${rnd(p[0])}" cy="${rnd(p[1])}" r="${dotR}" style="--f:${(i / (b.length - 1)).toFixed(3)}"><title>${esc(shortDate(b[i].end))}: ${plural(b[i][s.key], s.one, s.many)}</title></circle>`; });
+      pts.forEach((p, i) => { if (!showDot(s, i)) return; g += `<circle class="dot ${s.cls}" cx="${rnd(p[0])}" cy="${rnd(p[1])}" r="${dotR}" style="--f:${(i / (b.length - 1)).toFixed(3)}"><title>${esc(range(b[i]))}: ${plural(b[i][s.key], s.one, s.many)}</title></circle>`; });
     });
-    const total = b.reduce((a, x) => a + x.commits, 0), active = b.filter(x => x.commits > 0 || x.repos > 0).length;
-    const summary = (active ? `${plural(total, "commit", "commits")} across ${plural(b.repoCount || 0, "repository", "repositories")}, active on ${active} of ${b.length} days` : "No activity in this period") + " · public activity only" + (fetchedAt ? ` · updated ${new Date(fetchedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: DATA.timezone })}` : "");
+    const total = b.reduce((a, x) => a + x.commits, 0);
+    const summary = (total ? `${plural(total, "commit", "commits")} across ${plural(b.repoCount || 0, "repository", "repositories")}, active on ${b.activeDays} of ${b.windowDays} days` : "No activity in this period") + " · public activity only" + (fetchedAt ? ` · updated ${new Date(fetchedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: DATA.timezone })}` : "");
     return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="GitHub activity: ${esc(summary)}">${g}</svg>
       <ul class="legend">${ser.map(s => `<li><i class="sw ${s.cls === "s-a" ? "a" : "b"}"></i>${esc(s.name)}</li>`).join("")}</ul>
       <p class="meta note">${esc(summary)}</p>
-      <table class="sr"><caption>GitHub activity by date</caption><tr><th>Date</th>${ser.map(s => `<th>${esc(s.name)}</th>`).join("")}</tr>${b.map(x => `<tr><td>${esc(shortDate(x.end))}</td>${ser.map(s => `<td>${x[s.key]}</td>`).join("")}</tr>`).join("")}</table>`;
+      <table class="sr"><caption>GitHub activity by date</caption><tr><th>Date</th>${ser.map(s => `<th>${esc(s.name)}</th>`).join("")}</tr>${b.map(x => `<tr><td>${esc(range(x))}</td>${ser.map(s => `<td>${x[s.key]}</td>`).join("")}</tr>`).join("")}</table>`;
   }
 
+  /* "one point per day / week / 30 days", and the matching label spacing */
+  const spanName = (cfg, n) => cfg.step === 1 ? (n === 1 ? "day" : `${n} days`) : cfg.step === 7 ? (n === 1 ? "week" : `${n} weeks`) : `${n * cfg.step} days`;
+  const rangeBar = () => `<div class="range-bar" role="group" aria-label="Time range">${DATA.activity.ranges.map((r, i) => `<button class="range-btn${i === state.range ? " active" : ""}" data-range="${i}" aria-pressed="${i === state.range}">${esc(r.label)}</button>`).join("")}</div>`;
+
   const activityHtml = () => {
-    const a = state.activity, { days, labelEvery } = DATA.activity;
-    const sub = `<p class="meta">Last ${days} days &middot; one point per day, labelled every ${labelEvery} days</p>`;
-    if (a.status === "loading") return sub + `<p class="placeholder">Loading activity&hellip;</p>`;
-    if (a.status === "error") return sub + `<p class="placeholder">My activity could not be loaded at this time. Please view it directly on <a href="https://github.com/${DATA.githubUser}" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>`;
-    return sub + chartSvg(a.buckets, a.fetchedAt);
+    const a = state.activity, cfg = DATA.activity.ranges[state.range] || DATA.activity.ranges[0];
+    const sub = `<p class="meta">Last ${esc(cfg.label)} &middot; one point per ${spanName(cfg, 1)}, labelled every ${spanName(cfg, cfg.labelEvery)}</p>`;
+    let body;
+    if (a.status === "loading") body = a.lastChart ? `<div class="is-loading">${a.lastChart}</div>` : `<p class="placeholder">Loading activity&hellip;</p>`;
+    else if (a.status === "error") body = `<p class="placeholder">My activity could not be loaded at this time. Please view it directly on <a href="https://github.com/${DATA.githubUser}" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>`;
+    else body = a.chart;
+    return sub + body + rangeBar();
   };
 
   /* Commits are read straight from each public repository, so they appear as soon as they are pushed (the public events feed can lag by hours) */
-  async function loadActivity() {
+  async function loadActivity(days) {
     if (state.reposStatus !== "ok") throw new Error("Repositories unavailable");
-    const cached = cacheGet("dsv-commits-v2"); if (cached) return cached;
-    const days = Math.max(2, Math.min(90, DATA.activity.days));
+    days = Math.max(2, Math.min(730, days));
+    const cacheKey = "dsv-commits-v3:" + days;
+    const cached = cacheGet(cacheKey); if (cached) return cached;
     const since = addDays(new Date(tzKey(new Date()) + "T00:00:00Z"), -days).toISOString(); /* a day of margin; the buckets do the exact cut */
     const snap = state.snapshot, live = state.source === "live";
+    const snapCovers = !!snap && (snap.days || 0) >= days;   /* an older snapshot may not reach back far enough for the longer ranges */
     const snapCommits = n => snap ? snap.commits.filter(c => c.repo === n) : [];
     const liveCommits = async r => {
       const out = [];
-      for (let page = 1; page <= 3; page++) {
+      const pages = days > 90 ? 10 : 3;
+      for (let page = 1; page <= pages; page++) {
         const res = await gh(`https://api.github.com/repos/${DATA.githubUser}/${encodeURIComponent(r.name)}/commits?author=${DATA.githubUser}&since=${since}&per_page=100&page=${page}`);
         if (res.status === 409) return out;              /* an empty repository */
         if (!res.ok) throw new Error(res.status);
@@ -406,20 +438,101 @@ const DATA = {
     };
     const active = state.rawRepos.filter(r => new Date(r.pushed_at) >= new Date(since));
     const results = await Promise.allSettled(active.map(async r => {
-      if (snapCurrent(r)) return snapCommits(r.name);    /* the snapshot already holds everything up to the latest push */
+      if (snapCovers && snapCurrent(r)) return snapCommits(r.name);    /* the snapshot already holds everything up to the latest push */
       try { return await liveCommits(r); }
       catch (e) { if (snapRepo(r.name)) return snapCommits(r.name); throw e; }
     }));
     if (active.length && results.every(x => x.status === "rejected")) {
-      let saved = null; try { saved = JSON.parse(localStorage.getItem("dsv-commits-saved")); } catch (e) { /* none */ }
+      let saved = null; try { saved = JSON.parse(localStorage.getItem("dsv-commits-saved:" + days)); } catch (e) { /* none */ }
       if (saved && Array.isArray(saved.data)) return saved;   /* the last good result, with its own time */
       throw new Error("Commits unavailable");
     }
     const commits = results.flatMap(x => x.status === "fulfilled" ? x.value : []);
     const t = live || !snap ? Date.now() : Date.parse(snap.generatedAt);
     const complete = !results.some(x => x.status === "rejected");
-    if (complete) { try { localStorage.setItem("dsv-commits-saved", JSON.stringify({ t, data: commits })); } catch (e) { /* storage unavailable */ } }
-    return complete && live ? cacheSet("dsv-commits-v2", commits) : { t, data: commits };
+    if (complete) { try { localStorage.setItem("dsv-commits-saved:" + days, JSON.stringify({ t, data: commits })); } catch (e) { /* storage unavailable */ } }
+    return complete && live ? cacheSet(cacheKey, commits) : { t, data: commits };
+  }
+
+  /* ---------- GitHub availability (GitHub's own incident reports, one square per day) ---------- */
+  const STATUS_API = "https://www.githubstatus.com/api/v2/incidents.json";
+  const IMPACT = { minor: 1, major: 2, critical: 3 };               /* incidents whose impact is "none" are ignored */
+  const IMPACT_NAME = ["no incidents", "minor", "major", "critical"];
+  const hm = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
+
+  /* Time is measured in one-minute slots, so incidents that overlap are never counted twice. Days follow the configured time zone. */
+  function statusDays(incidents, n) {
+    const SLOT = 60000, now = Date.now(), from = now - (n + 1) * 864e5;
+    const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: DATA.timezone });
+    const keyOf = slot => dayFmt.format(new Date(slot * SLOT));
+    const best = new Map(), owner = [], days = new Map();
+    incidents.forEach(i => {
+      const rank = IMPACT[i.impact] || 0, a = Date.parse(i.started), z = i.resolved ? Date.parse(i.resolved) : now;
+      if (!rank || !(a < z) || z < from) return;
+      for (let s = Math.floor(Math.max(a, from) / SLOT); s * SLOT < z; s++) { best.set(s, Math.max(best.get(s) || 0, rank)); owner.push([s, i.id]); }
+    });
+    const day = key => { if (!days.has(key)) days.set(key, { minutes: 0, rank: 0, ids: new Set() }); return days.get(key); };
+    best.forEach((rank, s) => { const d = day(keyOf(s)); d.minutes += 1; d.rank = Math.max(d.rank, rank); });
+    owner.forEach(([s, id]) => day(keyOf(s)).ids.add(id));
+    const base = new Date(tzKey(new Date()) + "T00:00:00Z");
+    return Array.from({ length: n }, (_, i) => {
+      const date = addDays(base, -(n - 1 - i)), d = days.get(date.toISOString().slice(0, 10)) || { minutes: 0, rank: 0, ids: new Set() };
+      return { date, minutes: d.minutes, rank: d.rank, count: d.ids.size };
+    });
+  }
+
+  /* The data file written by the GitHub Action comes first (no request limit); the live status API is the fallback */
+  async function getStatus() {
+    const cached = cacheGet("dsv-status-v1"); if (cached) return cached.data;
+    let r = null;
+    if (location.protocol !== "file:") {
+      const snap = await fetch(DATA.status.snapshotFile, { cache: "no-cache" }).then(x => x.ok ? x.json() : null).catch(() => null);
+      if (snap && Array.isArray(snap.incidents)) r = { data: snap.incidents, t: Date.parse(snap.generatedAt) || Date.now(), source: "snapshot" };
+    }
+    if (!r) {
+      const res = await fetch(STATUS_API);
+      if (!res.ok) throw new Error(res.status);
+      const j = await res.json();
+      r = { data: (j.incidents || []).map(i => ({ id: i.id, impact: i.impact, started: i.started_at || i.created_at, resolved: i.resolved_at || null })), t: Date.now(), source: "live" };
+    }
+    return cacheSet("dsv-status-v1", r).data;
+  }
+
+  /* The availability box's orbiting dots take the average colour (the mean of the red, green and blue values) of all its squares, as they look on screen,
+     so the dots show the overall severity of the period. The square colours are set in the CSS only; they are read from there. */
+  const rgbOf = s => { const m = /rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/.exec(s || ""); return m ? [1, 2, 3].map(i => +m[i]) : null; };
+  function statusOrbit() {
+    const g = state.gstatus; if (!g || g.status !== "ok" || !g.days.length) return null;
+    const bg = rgbOf(getComputedStyle(document.body).backgroundColor) || [0, 0, 0];
+    const look = [0, 1, 2, 3].map(r => {                       /* how a square of each severity really appears (faded squares blend into the background) */
+      const p = document.createElement("i"); p.className = "sq r" + r; p.style.cssText = "position:absolute;visibility:hidden;pointer-events:none";
+      document.body.appendChild(p); const cs = getComputedStyle(p), c = rgbOf(cs.backgroundColor), o = parseFloat(cs.opacity); p.remove();
+      return c ? c.map((v, i) => v * o + bg[i] * (1 - o)) : null;
+    });
+    if (look.some(c => !c)) return null;
+    return `rgb(${[0, 1, 2].map(i => Math.round(g.days.reduce((a, d) => a + look[d.rank][i], 0) / g.days.length)).join(",")})`;
+  }
+  const statusOrbitAttr = () => { const c = statusOrbit(); return c ? ` style="--orbit-color:${c}"` : ""; };
+
+  const statusHtml = () => {
+    const g = state.gstatus, n = DATA.status.days, head = `<p class="status-title">GitHub availability</p>`;
+    if (g.status === "loading") return head + `<p class="meta">Loading GitHub's status history&hellip;</p>`;
+    if (g.status === "error") return head + `<p class="meta">GitHub's status history could not be loaded at this time. Please see <a href="https://www.githubstatus.com" target="_blank" rel="noopener noreferrer">githubstatus.com</a>.</p>`;
+    const total = g.days.reduce((a, d) => a + d.minutes, 0), pct = total / (n * 1440) * 100;
+    const when = new Date(g.t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: DATA.timezone });
+    const summary = (total ? `An incident was open for ${hm(total)} (${pct < 0.01 ? "under 0.01" : pct.toFixed(2)}%) of the last ${n} days.` : `No incidents in the last ${n} days.`) + ` Updated ${when}.`;
+    const tip = d => `${d.date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}: ${d.minutes ? `${plural(d.count, "incident", "incidents")}, ${hm(d.minutes)}, ${IMPACT_NAME[d.rank]}` : "no incidents"}`;
+    return head + `<p class="meta">Last ${n} days &middot; one square per day</p>
+      <div class="status-strip" role="img" aria-label="${esc(summary)}">${g.days.map(d => `<i class="sq r${d.rank}" title="${esc(tip(d))}"></i>`).join("")}</div>
+      <ul class="status-legend"><li><i class="sq r0"></i>None</li><li><i class="sq r1"></i>Minor</li><li><i class="sq r2"></i>Major</li><li><i class="sq r3"></i>Critical</li></ul>
+      <p class="meta note">${esc(summary)} <a href="https://github.com/${DATA.githubUser}/${DATA.githubUser}.github.io#github-availability" target="_blank" rel="noopener noreferrer">How this is measured</a></p>`;
+  };
+  async function loadStatus() {
+    state.gstatus = { status: "loading" };
+    try { const r = await getStatus(); state.gstatus = { status: "ok", days: statusDays(r.data, DATA.status.days), t: r.t, source: r.source }; }
+    catch (err) { console.error("GitHub status error:", err); state.gstatus = { status: "error" }; }
+    const el = $("#gh-status");
+    if (el) { el.innerHTML = statusHtml(); const c = statusOrbit(); if (c) el.style.setProperty("--orbit-color", c); else el.style.removeProperty("--orbit-color"); }
   }
 
   /* ---------- Views ---------- */
@@ -505,6 +618,7 @@ const DATA = {
         <a class="btn" href="${esc(DATA.cv)}" download>Download CV (PDF)</a>
         <button class="btn" data-scroll="contact-card">Contact me</button></div></div>
       <h2>About me</h2><p>${esc(DATA.summary)}</p></div>
+      <div class="status-card" id="gh-status"${statusOrbitAttr()}>${statusHtml()}</div>
       <aside class="about-side"><h2>GitHub Activity</h2><div class="activity-card" id="activity">${activityHtml()}</div></aside>
       <div class="about-rest">
       <h2>Education</h2>${staticCards(DATA.education)}
@@ -651,6 +765,8 @@ const DATA = {
     }
     const sc = ev.target.closest("[data-scroll]");
     if (sc) { const t = document.getElementById(sc.dataset.scroll); if (t) t.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+    const rb = ev.target.closest("[data-range]");
+    if (rb) { const i = +rb.dataset.range; if (i !== state.range) { state.range = i; loadRange(); } return; }
     const cj = ev.target.closest("[data-certjump]");
     if (cj) {
       const name = cj.dataset.certjump;
@@ -773,15 +889,28 @@ const DATA = {
   /* The graph updates in place, so the page does not jump when the data arrives */
   /* Only for landscape screens (wider than tall); portrait screens skip the graph and its request */
   const landscape = matchMedia("(orientation: landscape)");
-  let activityStarted = false;
-  const refreshActivity = () => { const el = $("#activity"); if (el) el.innerHTML = activityHtml(); };
+  let activityStarted = false, rangeToken = 0;
+  const refreshActivity = () => {
+    const el = $("#activity"); if (!el) return;
+    const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.range : undefined;
+    el.innerHTML = activityHtml();
+    if (focused !== undefined) { const btn = el.querySelector(`[data-range="${focused}"]`); if (btn) btn.focus(); }   /* keep keyboard focus on the button just used */
+  };
+  /* Loads and draws the graph for the selected range. While a new range loads, the previous graph stays visible but dimmed. */
+  function loadRange() {
+    const cfg = DATA.activity.ranges[state.range] || DATA.activity.ranges[0], token = ++rangeToken;
+    state.activity = { status: "loading", buckets: [], lastChart: state.activity.chart || state.activity.lastChart || "" };
+    refreshActivity();
+    reposDone.then(() => loadActivity(cfg.days))
+      .then(r => { if (token !== rangeToken) return; const b = buildBuckets(r.data, cfg); state.activity = { status: "ok", buckets: b, fetchedAt: r.t, chart: chartSvg(b, r.t) }; })
+      .catch(err => { if (token !== rangeToken) return; console.error("Activity data error:", err); state.activity = { status: "error", buckets: [] }; })
+      .finally(() => { if (token === rangeToken) refreshActivity(); });
+  }
   function startActivity() {
     if (activityStarted) return;
     activityStarted = true;
-    reposDone.then(loadActivity)
-      .then(r => { state.activity = { status: "ok", buckets: buildBuckets(r.data), fetchedAt: r.t }; })
-      .catch(err => { console.error("Activity data error:", err); state.activity.status = "error"; })
-      .finally(refreshActivity);
+    loadRange();
+    loadStatus();
   }
   if (landscape.matches) startActivity();
   landscape.addEventListener("change", e => { if (e.matches) startActivity(); });
