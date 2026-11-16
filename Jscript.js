@@ -274,7 +274,7 @@ const DATA = {
     }).join("");
     const basis = `Measured in bytes of code across ${plural(have, "repository", "repositories")}, as GitHub measures languages (${fmtBytes(sum)} in total).` + (have < total ? ` ${plural(total - have, "repository", "repositories")} had no language data.` : "");
     return `<div class="pie-wrap">
-      <svg class="pie" viewBox="0 0 100 100" role="img" aria-label="${esc("Languages across all projects: " + list.map(l => `${l.name} ${pctLabel(l.pct)}`).join(", "))}"><circle class="pie-track" cx="50" cy="50" r="50"/><g transform="rotate(-90 50 50)">${segs}</g></svg>
+      <svg class="pie" viewBox="0 0 100 100" role="img" aria-label="${esc("Languages across all projects: " + list.map(l => `${l.name} ${pctLabel(l.pct)}`).join(", "))}"><circle class="pie-track" cx="50" cy="50" r="50"/><g transform="rotate(-90 50 50)">${segs}</g><g class="pie-power" aria-hidden="true"><path class="pie-power-glyph" d="M50 -6V50M14.64 14.64A50 50 0 1 0 85.36 14.64"/></g></svg>
       <ul class="pie-legend">${list.map(l => `<li><i style="background:${l.color}"></i><b>${esc(l.name)}</b><span class="pct">${pctLabel(l.pct)}</span></li>`).join("")}</ul></div>
       <p class="meta note">${esc(basis)}</p>`;
   };

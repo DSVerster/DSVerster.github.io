@@ -169,6 +169,10 @@ a:hover { color: var(--teal); }
                                       speed by default; replace "var(--orbit-time)" with your own value (for example 6s)
                                       to set it independently. */
   --pie-time: 3s;                  /* ANIMATION SPEED 3: time for the language pie chart to fill in, slice by slice */
+  /* POWER ICON FLASH: once the pie has finished filling, a power button fades in, stays, then fades out (1 second in total by default) */
+  --power-in: .45s;                /* fade-in time */
+  --power-hold: .1s;               /* time it stays fully visible */
+  --power-out: .45s;               /* fade-out time */
 }
 
 /* 1. Two dots orbiting the border of any box on hover, clockwise and opposite each other.
@@ -294,10 +298,18 @@ a:hover { color: var(--teal); }
 /* ==========================================================================
    Languages across all projects: one pie, drawn like a loading bar (each slice fills in turn, clockwise)
    ========================================================================== */
-.lang-pie-card { max-width: 900px; padding: 18px 20px; border: 1px solid var(--soft); }
+.lang-pie-card { max-width: 900px; padding: 28px 20px 18px; border: 1px solid var(--soft); }   /* extra room above, for the power symbol's line */
 .pie-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 24px 44px; }
-.pie { flex: none; width: clamp(180px, 28vw, 260px); height: auto; }
+.pie { flex: none; width: clamp(180px, 28vw, 260px); height: auto; overflow: visible; }   /* visible: the power symbol's ring and line reach just past the pie's edge */
 .pie-track { fill: var(--soft); }
+.pie-power { opacity: 0; pointer-events: none;   /* starts when the pie has finished filling: fade in, stay, fade out */
+  animation: power-in var(--power-in) var(--ease) var(--pie-time) both,
+             power-out var(--power-out) var(--ease) calc(var(--pie-time) + var(--power-in) + var(--power-hold)) forwards; }
+@keyframes power-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes power-out { from { opacity: 1; } to { opacity: 0; } }
+/* The power symbol is drawn over the whole pie: the ring has the pie's own radius and the line runs from just above the top to the centre.
+   No background; it takes the pie's average colour (--orbit-color). The faint shadow only keeps it readable over the slices. */
+.pie-power-glyph { fill: none; stroke: var(--orbit-color, var(--fg)); stroke-width: 3.5; stroke-linecap: round; filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, .9)); }
 .pie-seg { animation: pie-fill calc(var(--pie-time) * var(--w)) linear both; animation-delay: calc(var(--pie-time) * var(--s)); }
 @keyframes pie-fill { from { stroke-dasharray: 0 100; } }
 .pie-legend { flex: 1; min-width: 220px; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 28px; margin: 0; padding: 0; list-style: none; }
