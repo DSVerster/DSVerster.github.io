@@ -168,28 +168,29 @@ a:hover { color: var(--teal); }
   --graph-time: 3.3s; /* ANIMATION SPEED 2: time for the activity graph to draw itself. It follows the orbit (Also like 3.3v :) )
                                       speed by default; replace "var(--orbit-time)" with your own value (for example 6s)
                                       to set it independently. */
+  --pie-time: 1s;                  /* ANIMATION SPEED 3: time for the language pie chart to fill in, slice by slice */
 }
 
 /* 1. Two dots orbiting the border of any box on hover, clockwise and opposite each other.
       To give another kind of box the same effect, add its class to the lists below (three places). */
-:is(.card, .contact-card, .activity-card, .cert-group, .placeholder) { position: relative; transition: border-color .2s var(--ease), transform .2s var(--ease); }
-:is(.card, .contact-card, .activity-card, .cert-group, .placeholder)::before,
-:is(.card, .contact-card, .activity-card, .cert-group, .placeholder)::after {
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card) { position: relative; transition: border-color .2s var(--ease), transform .2s var(--ease); }
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card)::before,
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card)::after {
   content: ""; position: absolute; top: 0; left: 0; width: 6px; height: 6px; border-radius: 50%;
   background: var(--border); box-shadow: 0 0 8px 1px var(--border);
   offset-path: inset(0); offset-rotate: 0deg; offset-distance: 0%;
   opacity: 0; pointer-events: none; transition: opacity .35s var(--ease);
 }
-:is(.card, .contact-card, .activity-card, .cert-group, .placeholder):hover::before,
-:is(.card, .contact-card, .activity-card, .cert-group, .placeholder):hover::after,
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card):hover::before,
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card):hover::after,
 .card:focus-visible::before, .card:focus-visible::after {
   opacity: 1; animation: orbit var(--orbit-time) linear infinite;
 }
-:is(.card, .contact-card, .activity-card, .cert-group, .placeholder):hover::after,
+:is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card):hover::after,
 .card:focus-visible::after { animation-delay: calc(var(--orbit-time) / -2); } /* always half a lap behind */
-:is(.activity-card, .cert-group, .placeholder):hover { border-color: var(--border); }
+:is(.activity-card, .cert-group, .placeholder, .lang-pie-card):hover { border-color: var(--border); }
 @keyframes orbit { to { offset-distance: 100%; } }
-@supports not (offset-path: inset(0)) { .card::before, .card::after, .contact-card::before, .contact-card::after, .activity-card::before, .activity-card::after, .cert-group::before, .cert-group::after, .placeholder::before, .placeholder::after { display: none; } }
+@supports not (offset-path: inset(0)) { .card::before, .card::after, .contact-card::before, .contact-card::after, .activity-card::before, .activity-card::after, .cert-group::before, .cert-group::after, .placeholder::before, .placeholder::after, .lang-pie-card::before, .lang-pie-card::after { display: none; } }
 
 /* 2. Cards rise gently into place when a page opens (first eight only) */
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -218,7 +219,7 @@ a:hover { color: var(--teal); }
 
 @media (prefers-reduced-motion: reduce) {
   .card::before, .card::after, .contact-card::before, .contact-card::after, .activity-card::before, .activity-card::after,
-  .cert-group::before, .cert-group::after, .placeholder::before, .placeholder::after { display: none; }
+  .cert-group::before, .cert-group::after, .placeholder::before, .placeholder::after, .lang-pie-card::before, .lang-pie-card::after { display: none; }
 }
 
 /* ==========================================================================
@@ -289,3 +290,21 @@ a:hover { color: var(--teal); }
 .langs.big .lang-legend { gap: 4px 20px; margin-top: 10px; }
 .langs.big .lang-item { font-size: 15px; }
 @keyframes lang-grow { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+
+/* ==========================================================================
+   Languages across all projects: one pie, drawn like a loading bar (each slice fills in turn, clockwise)
+   ========================================================================== */
+.lang-pie-card { max-width: 900px; padding: 18px 20px; border: 1px solid var(--soft); }
+.pie-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 24px 44px; }
+.pie { flex: none; width: clamp(180px, 28vw, 260px); height: auto; }
+.pie-track { fill: var(--soft); }
+.pie-seg { animation: pie-fill calc(var(--pie-time) * var(--w)) linear both; animation-delay: calc(var(--pie-time) * var(--s)); }
+@keyframes pie-fill { from { stroke-dasharray: 0 100; } }
+.pie-legend { flex: 1; min-width: 220px; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 28px; margin: 0; padding: 0; list-style: none; }
+.pie-legend li { display: flex; align-items: center; gap: 8px; max-width: none; font-size: 15px; }
+.pie-legend i { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+.pie-legend b { font-weight: 600; }
+.pie-legend .pct { margin-left: auto; font-family: var(--mono); font-size: 14px; color: var(--dim); }
+.pie-progress { max-width: 420px; height: 8px; margin: 10px 0 4px; overflow: hidden; border-radius: 4px; background: var(--soft); }
+.pie-progress i { display: block; height: 100%; background: var(--teal); transition: width .3s var(--ease); }
+.lang-pie-card .note { margin: 14px 0 0; max-width: none; }

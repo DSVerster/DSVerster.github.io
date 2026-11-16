@@ -192,16 +192,21 @@ const DATA = {
   }
   const langBox = (r, big) => `<span class="langs${big ? " big" : ""}" data-lang-repo="${esc(r.name)}"${state.langs[r.name] ? " data-done" : ""}>${langHtml(r)}</span>`;
   /* Fills in breakdowns that arrived after the page was drawn, without redrawing the page */
-  const fillLangs = () => document.querySelectorAll("[data-lang-repo]:not([data-done])").forEach(el => {
-    const r = state.repos.find(x => x.name === el.dataset.langRepo);
-    if (r && state.langs[r.name]) { el.innerHTML = langHtml(r); el.setAttribute("data-done", ""); }
-  });
+  const fillLangs = () => {
+    document.querySelectorAll("[data-lang-repo]:not([data-done])").forEach(el => {
+      const r = state.repos.find(x => x.name === el.dataset.langRepo);
+      if (r && state.langs[r.name]) { el.innerHTML = langHtml(r); el.setAttribute("data-done", ""); }
+    });
+    refreshPie();
+  };
   const langRequested = new Set();
+  let langBusy = 0, langCalled = false;   /* requests in flight, and whether loading has started at all (used by the pie chart) */
   async function loadLanguages() {
     if (state.reposStatus !== "ok") return;
+    langCalled = true;
     const wanted = new Set([...document.querySelectorAll("[data-lang-repo]:not([data-done])")].map(el => el.dataset.langRepo));
     await Promise.allSettled(state.repos.filter(r => wanted.has(r.name) && !langRequested.has(r.name)).map(async r => {
-      langRequested.add(r.name);
+      langRequested.add(r.name); langBusy++;
       try {
         let d = snapCurrent(r) ? snapLangs(r.name) : null;
         if (!d) d = langCacheGet(r);
@@ -215,9 +220,58 @@ const DATA = {
         const old = snapLangs(r.name) || langCacheStale(r);   /* GitHub unavailable: an older saved breakdown is better than none */
         if (old) { state.langs[r.name] = old; fillLangs(); }
         else { langRequested.delete(r.name); throw e; }      /* the main language stays shown; a later page view tries again */
-      }
+      } finally { langBusy--; }
     }));
+    refreshPie();
   }
+
+  /* ---------- Languages across all projects: one pie, separate from the project cards, drawn like a loading bar ---------- */
+  const PIE_MAX = 8;                                   /* the largest languages are named; the rest are grouped as "Other" */
+  const pctLabel = p => p < 0.1 ? "<0.1%" : p.toFixed(1) + "%";
+  function pieData() {
+    const totals = {}; let have = 0;
+    state.repos.forEach(r => {
+      const d = state.langs[r.name]; if (!d) return;
+      have++;
+      Object.entries(d).forEach(([n, b]) => { totals[n] = (totals[n] || 0) + b; });
+    });
+    const sum = Object.values(totals).reduce((a, b) => a + b, 0);
+    let list = Object.entries(totals).sort((a, b) => b[1] - a[1]).map(([name, bytes]) => ({ name, bytes, color: langColor(name), pct: sum ? bytes / sum * 100 : 0 }));
+    if (list.length > PIE_MAX + 1) {
+      const rest = list.slice(PIE_MAX);
+      list = [...list.slice(0, PIE_MAX), { name: "Other", bytes: rest.reduce((a, x) => a + x.bytes, 0), color: "#8b949e", pct: rest.reduce((a, x) => a + x.pct, 0) }];
+    }
+    return { have, sum, list };
+  }
+  const pieSig = () => { const d = pieData(); return `${state.reposStatus}|${d.have}|${langBusy}|${d.sum}|${langCalled}`; };
+  const pieInner = () => {
+    const total = state.repos.length;
+    if (state.reposStatus === "loading") return `<p class="meta">Loading repositories&hellip;</p><div class="pie-progress"><i style="width:0%"></i></div>`;
+    if (state.reposStatus === "error") return `<p class="placeholder">The language chart needs the repository list, which could not be loaded at this time. Please view the repositories directly on <a href="https://github.com/${DATA.githubUser}?tab=repositories" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>`;
+    if (!total) return `<p class="placeholder">No public repositories are available yet.</p>`;
+    const { have, sum, list } = pieData();
+    if (have < total && (!langCalled || langBusy > 0)) {   /* still collecting: a real progress bar, then the pie is drawn once */
+      return `<p class="meta">Analysing languages&hellip; ${have} of ${total} repositories</p><div class="pie-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${have}"><i style="width:${Math.round(have / total * 100)}%"></i></div>`;
+    }
+    if (!sum) return `<p class="placeholder">No language data is available for these repositories yet.</p>`;
+    let acc = 0;
+    const segs = list.map(l => {
+      const s = acc; acc += l.pct;
+      return `<circle class="pie-seg" cx="50" cy="50" r="25" pathLength="100" fill="none" stroke="${l.color}" stroke-width="50" stroke-dasharray="${Math.max(l.pct - 0.25, 0.05).toFixed(3)} 100" stroke-dashoffset="${(-s).toFixed(3)}" style="--s:${(s / 100).toFixed(4)};--w:${(l.pct / 100).toFixed(4)}"><title>${esc(l.name)}: ${pctLabel(l.pct)}</title></circle>`;
+    }).join("");
+    const basis = `Measured in bytes of code across ${plural(have, "repository", "repositories")}, as GitHub measures languages (${fmtBytes(sum)} in total).` + (have < total ? ` ${plural(total - have, "repository", "repositories")} had no language data.` : "");
+    return `<div class="pie-wrap">
+      <svg class="pie" viewBox="0 0 100 100" role="img" aria-label="${esc("Languages across all projects: " + list.map(l => `${l.name} ${pctLabel(l.pct)}`).join(", "))}"><circle class="pie-track" cx="50" cy="50" r="50"/><g transform="rotate(-90 50 50)">${segs}</g></svg>
+      <ul class="pie-legend">${list.map(l => `<li><i style="background:${l.color}"></i><b>${esc(l.name)}</b><span class="pct">${pctLabel(l.pct)}</span></li>`).join("")}</ul></div>
+      <p class="meta note">${esc(basis)}</p>`;
+  };
+  const pieSection = () => `<section class="lang-pie-card" id="langpie" data-sig="${pieSig()}">${pieInner()}</section>`;
+  /* Redraws only when something changed, so the animation does not replay needlessly */
+  const refreshPie = () => {
+    const el = document.getElementById("langpie"); if (!el) return;
+    const sig = pieSig(); if (el.dataset.sig === sig) return;
+    el.dataset.sig = sig; el.innerHTML = pieInner();
+  };
 
   /* ---------- Activity graph (commits in public repositories, one point per day in the configured time zone) ---------- */
   const shortDate = d => d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" });
@@ -449,7 +503,7 @@ const DATA = {
     experience: () => overview("Experience", DATA.experience, "experience", "I will add further experience here as I gain it."),
     education: () => overview("Education", DATA.education, "education", "My education details will appear here.", certSection(), "Degrees"),
     certificates: certOverview,
-    projects: () => `<h1>Projects</h1><p>These are retrieved automatically from my public <a href="https://github.com/${DATA.githubUser}" target="_blank" rel="noopener noreferrer">GitHub profile</a>, so the list stays current as I build and contribute to new projects.</p>${repoCards()}`,
+    projects: () => `<h1>Projects</h1><p>These are retrieved automatically from my public <a href="https://github.com/${DATA.githubUser}" target="_blank" rel="noopener noreferrer">GitHub profile</a>, so the list stays current as I build and contribute to new projects.</p><h2>Languages across all projects</h2>${pieSection()}<h2>Repositories</h2>${repoCards()}`,
     skills: () => `<h1>Skills</h1>${Object.entries(DATA.skills).map(([k, v]) => `<h2>${esc(k)}</h2><ul class="chips">${v.map(s => `<li>${esc(s)}</li>`).join("")}</ul>`).join("")}`,
     contact: () => `<h1>Contact</h1><p>If you would like to work with me, or simply to talk about a project, please get in touch. I will gladly reply as soon as I can.</p>${contactBlock()}`
   };
@@ -634,16 +688,16 @@ const DATA = {
      1. the snapshot file (same origin, so GitHub's request limit does not apply)
      2. one live GitHub request, which tops it up for anything pushed since the snapshot was made
      3. if GitHub refuses or is down: the snapshot alone, or else the last copy saved on this device */
-  const snapshotP = (location.protocol === "file:" ? Promise.resolve(null) : fetch(DATA.snapshotFile, { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null))
+  const fetchSnapshot = () => (location.protocol === "file:" ? Promise.resolve(null) : fetch(DATA.snapshotFile, { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null))
     .then(s => s && Array.isArray(s.repos) && s.commits && s.languages ? s : null);
   const cached = cacheGet("dsv-repos-v2");
-  const liveRepos = () => cached ? Promise.resolve(cached.data)
+  const liveRepos = fresh => cached && !fresh ? Promise.resolve(cached.data)
     : gh(`https://api.github.com/users/${DATA.githubUser}/repos?per_page=100&sort=pushed`)
         .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
         .then(repos => { cacheSet("dsv-repos-v2", repos); try { localStorage.setItem("dsv-repos-saved", JSON.stringify(repos)); } catch (e) { /* storage unavailable */ } return repos; });
-  const load = snapshotP.then(snap => {
-    state.snapshot = snap;
-    return liveRepos().catch(err => {
+  const loadRepos = fresh => fetchSnapshot().then(snap => {
+    state.snapshot = snap; state.source = "live";
+    return liveRepos(fresh).catch(err => {
       console.warn("Live GitHub data unavailable:", err);
       if (snap) { state.source = "snapshot"; return snap.repos; }
       let saved = null; try { saved = JSON.parse(localStorage.getItem("dsv-repos-saved")); } catch (e) { /* none */ }
@@ -652,6 +706,8 @@ const DATA = {
     });
   });
 
+  const load = loadRepos(false);
+
   /* The blue status bar shows when the portfolio repository was last pushed to */
   const siteUpdated = iso => {
     const days = Math.round((new Date(tzKey(new Date()) + "T00:00:00Z") - new Date(tzKey(iso) + "T00:00:00Z")) / 864e5);
@@ -659,8 +715,7 @@ const DATA = {
     return `Portfolio repository: ${date}; last update ${days <= 0 ? "today" : days + (days === 1 ? " day ago" : " days ago")}`;
   };
 
-  const reposDone = load
-    .then(repos => {
+  const applyRepos = repos => {
       state.rawRepos = repos.filter(r => !r.fork);
       const site = repos.find(r => r.name.toLowerCase() === `${DATA.githubUser.toLowerCase()}.github.io`);
       state.repos = repos.filter(r => !r.fork && (DATA.showPortfolioRepo || r.name.toLowerCase() !== `${DATA.githubUser.toLowerCase()}.github.io`))
@@ -670,9 +725,33 @@ const DATA = {
       const saved = state.snapshot && new Date(state.snapshot.generatedAt).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: DATA.timezone });
       const note = state.source === "snapshot" ? ` (live GitHub unavailable; data saved ${saved})` : state.source === "saved" ? " (live GitHub unavailable; saved copy)" : "";
       $("#statusRepos").textContent = (site ? siteUpdated(site.pushed_at) : `${plural(state.repos.length, "public repository", "public repositories")} loaded from GitHub`) + note;
-    })
-    .catch(err => { console.error("GitHub API error:", err); state.reposStatus = "error"; $("#statusRepos").textContent = state.rateLimited ? "GitHub's hourly request limit was reached; please try again later" : "GitHub repositories unavailable"; })
-    .finally(() => { const s = location.hash.slice(1); if (s.startsWith("projects/") && !state.tabs.includes(s)) open(s); else render(); });
+  };
+  const onRepoFail = err => {
+    console.error("GitHub API error:", err);
+    state.reposStatus = "error";
+    const again = retries < 10 ? "; retrying automatically" : "; please try again later";
+    $("#statusRepos").textContent = (state.rateLimited ? "GitHub's hourly request limit was reached" : "GitHub repositories unavailable") + again;
+    scheduleRetry();
+  };
+  const finishLoad = () => { const s = location.hash.slice(1); if (s.startsWith("projects/") && !state.tabs.includes(s)) open(s); else render(); };
+  const reposDone = load.then(applyRepos).catch(onRepoFail).finally(finishLoad);
+
+  /* If nothing could be loaded and nothing is saved (for example on a first visit while GitHub is unreachable), try again by itself:
+     every minute (up to ten times), whenever the connection returns and whenever the tab is shown again. The graph and the language bars then appear. */
+  let retries = 0, retrying = false, retryTimer = null;
+  const scheduleRetry = () => { if (retries >= 10 || location.protocol === "file:") return; retries++; clearTimeout(retryTimer); retryTimer = setTimeout(retryNow, 60000); };
+  function retryNow() {
+    if (retrying || state.reposStatus !== "error") return;
+    retrying = true; clearTimeout(retryTimer);
+    state.rateLimited = false; state.reposStatus = "loading"; render();
+    $("#statusRepos").textContent = "Retrying GitHub\u2026";
+    loadRepos(true).then(applyRepos)
+      .then(() => { state.activity = { status: "loading", buckets: [] }; activityStarted = false; if (landscape.matches) startActivity(); })
+      .catch(onRepoFail)
+      .finally(() => { retrying = false; finishLoad(); });
+  }
+  window.addEventListener("online", retryNow);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) retryNow(); });
 
   /* Full language breakdowns arrive after the repositories and are filled in without redrawing the page */
   reposDone.then(loadLanguages);
