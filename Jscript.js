@@ -160,6 +160,12 @@ const DATA = {
     "VHDL": "#adb2cb", "Perl": "#0298c3", "R": "#198CE7", "Haskell": "#5e5086", "Arduino": "#bd79d1"
   };
   const langColor = n => LANG_COLORS[n] || "#8b949e";
+  /* The most used language of a repository (by bytes, or GitHub's main language until the breakdown arrives) sets the colour of its orbiting dots */
+  const topLang = r => {
+    const d = state.langs[r.name], top = d && Object.entries(d).sort((a, b) => b[1] - a[1])[0];
+    return top ? top[0] : r.language || null;
+  };
+  const orbitStyle = r => { const n = topLang(r); return n ? ` style="--orbit-color:${langColor(n)}"` : ""; };
   const fmtBytes = b => b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
   const langCacheRead = r => { try { return JSON.parse(localStorage.getItem("dsv-lang-v1:" + r.name)); } catch (e) { return null; } };
   /* Valid while the repository has not been pushed to since. Right after a push it is only trusted briefly (GitHub can take a few minutes to update its figures) */
@@ -195,7 +201,7 @@ const DATA = {
   const fillLangs = () => {
     document.querySelectorAll("[data-lang-repo]:not([data-done])").forEach(el => {
       const r = state.repos.find(x => x.name === el.dataset.langRepo);
-      if (r && state.langs[r.name]) { el.innerHTML = langHtml(r); el.setAttribute("data-done", ""); }
+      if (r && state.langs[r.name]) { el.innerHTML = langHtml(r); el.setAttribute("data-done", ""); const card = el.closest(".card"), t = topLang(r); if (card && t) card.style.setProperty("--orbit-color", langColor(t)); }
     });
     refreshPie();
   };
@@ -243,6 +249,13 @@ const DATA = {
     }
     return { have, sum, list };
   }
+  /* The pie's orbiting dots take the average colour (the mean of the red, green and blue values) of every slice */
+  const hexRgb = h => { const m = /^#?([0-9a-f]{6})$/i.exec(h); return m ? [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16)) : null; };
+  const avgColor = colors => {
+    const rgb = colors.map(hexRgb).filter(Boolean);
+    return rgb.length ? `rgb(${[0, 1, 2].map(i => Math.round(rgb.reduce((a, c) => a + c[i], 0) / rgb.length)).join(",")})` : null;
+  };
+  const pieOrbit = () => avgColor(pieData().list.map(l => l.color));
   const pieSig = () => { const d = pieData(); return `${state.reposStatus}|${d.have}|${langBusy}|${d.sum}|${langCalled}`; };
   const pieInner = () => {
     const total = state.repos.length;
@@ -265,12 +278,13 @@ const DATA = {
       <ul class="pie-legend">${list.map(l => `<li><i style="background:${l.color}"></i><b>${esc(l.name)}</b><span class="pct">${pctLabel(l.pct)}</span></li>`).join("")}</ul></div>
       <p class="meta note">${esc(basis)}</p>`;
   };
-  const pieSection = () => `<section class="lang-pie-card" id="langpie" data-sig="${pieSig()}">${pieInner()}</section>`;
+  const pieSection = () => { const oc = pieOrbit(); return `<section class="lang-pie-card" id="langpie" data-sig="${pieSig()}"${oc ? ` style="--orbit-color:${oc}"` : ""}>${pieInner()}</section>`; };
   /* Redraws only when something changed, so the animation does not replay needlessly */
   const refreshPie = () => {
     const el = document.getElementById("langpie"); if (!el) return;
     const sig = pieSig(); if (el.dataset.sig === sig) return;
     el.dataset.sig = sig; el.innerHTML = pieInner();
+    const oc = pieOrbit(); if (oc) el.style.setProperty("--orbit-color", oc); else el.style.removeProperty("--orbit-color");
   };
 
   /* ---------- Activity graph (commits in public repositories, one point per day in the configured time zone) ---------- */
@@ -464,7 +478,7 @@ const DATA = {
     if (state.reposStatus === "loading") return `<p class="placeholder">Loading repositories from GitHub&hellip;</p>`;
     if (state.reposStatus === "error") return `<p class="placeholder">The repositories could not be loaded at this time. Please view them directly on <a href="https://github.com/${DATA.githubUser}?tab=repositories" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>`;
     if (!state.repos.length) return `<p class="placeholder">No public repositories are available yet.</p>`;
-    return `<div class="facts">${state.repos.slice(0, limit ?? 999).map(r => `<button class="card" data-open="projects/${esc(r.name)}"><strong>${esc(r.name)}</strong>${langBox(r)}<small>Created ${esc(repoDay(r.created_at))}</small><small>Updated ${esc(repoDay(r.pushed_at))}</small>${compact
+    return `<div class="facts">${state.repos.slice(0, limit ?? 999).map(r => `<button class="card" data-open="projects/${esc(r.name)}"${orbitStyle(r)}><strong>${esc(r.name)}</strong>${langBox(r)}<small>Created ${esc(repoDay(r.created_at))}</small><small>Updated ${esc(repoDay(r.pushed_at))}</small>${compact
       ? ""
       : `<p>${esc(r.description || "Description to be added.")}</p>`}</button>`).join("")}</div>`;
   };
@@ -568,12 +582,12 @@ const DATA = {
   /* ---------- Explorer tree ---------- */
   const badge = (t, c) => `<span class="badge" style="--c:${c}">${t}</span>`;
 
-  /* A folder lists its sub-folders first (the "extra" block), then its files in alphabetical order */
+  /* A folder lists its files first, in alphabetical order, and then its sub-folders (the "extra" block) */
   const folderNode = (id, name, emptyText, children, extra = "") => {
     const isOpen = state.open.has(id);
     const sorted = [...children].sort((a, b) => byName(a.label, b.label));
     return `<div class="folder ${isOpen ? "open" : ""}"><button class="node ${state.active === id ? "active" : ""}" data-folder="${id}" style="--d:1" role="treeitem" aria-expanded="${isOpen}"><span class="chev">&#9654;</span><span class="label">${name}</span></button>
-      <div class="kids"><div>${extra}${sorted.length ? sorted.map(c => `<button class="node ${state.active === id + "/" + c.id ? "active" : ""}" data-open="${id}/${esc(c.id)}" style="--d:3">${badge("MD", "var(--blue)")}<span class="label">${esc(c.label)}</span></button>`).join("") : (extra ? "" : `<div class="empty-note" style="--d:3">${emptyText}</div>`)}</div></div></div>`;
+      <div class="kids"><div>${sorted.length ? sorted.map(c => `<button class="node ${state.active === id + "/" + c.id ? "active" : ""}" data-open="${id}/${esc(c.id)}" style="--d:3">${badge("MD", "var(--blue)")}<span class="label">${esc(c.label)}</span></button>`).join("") : (extra ? "" : `<div class="empty-note" style="--d:3">${emptyText}</div>`)}${extra}</div></div></div>`;
   };
 
   /* Certificates are nested by provider so the tree stays short as the list grows (providers and certificates A to Z) */
@@ -590,7 +604,7 @@ const DATA = {
       <div class="kids"><div>${inner}</div></div></div>`;
   };
 
-  /* Like a normal file directory: folders first, then files, each group in alphabetical order */
+  /* Files first, then folders, each group in alphabetical order */
   function renderTree() {
     const file = (id, name, ext, c) => `<button class="node ${state.active === id ? "active" : ""}" data-open="${id}" style="--d:1">${badge(ext, c)}<span class="label">${name}</span></button>`;
     const kids = list => list.map(e => ({ id: e.id, label: e.title }));
@@ -612,7 +626,7 @@ const DATA = {
 
     $("#tree").innerHTML = `
       <button class="node" data-folder="portfolio" style="--d:0"><span class="chev" style="transform:${state.open.has("portfolio") ? "rotate(90deg)" : "none"}">&#9654;</span><span class="label"><strong>PORTFOLIO</strong></span></button>
-      <div class="kids" style="grid-template-rows:${state.open.has("portfolio") ? "1fr" : "0fr"}"><div>${folders}${files}</div></div>`;
+      <div class="kids" style="grid-template-rows:${state.open.has("portfolio") ? "1fr" : "0fr"}"><div>${files}${folders}</div></div>`;
   }
 
   /* ---------- Events ---------- */

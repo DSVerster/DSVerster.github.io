@@ -168,7 +168,7 @@ a:hover { color: var(--teal); }
   --graph-time: 3.3s; /* ANIMATION SPEED 2: time for the activity graph to draw itself. It follows the orbit (Also like 3.3v :) )
                                       speed by default; replace "var(--orbit-time)" with your own value (for example 6s)
                                       to set it independently. */
-  --pie-time: 1s;                  /* ANIMATION SPEED 3: time for the language pie chart to fill in, slice by slice */
+  --pie-time: 3s;                  /* ANIMATION SPEED 3: time for the language pie chart to fill in, slice by slice */
 }
 
 /* 1. Two dots orbiting the border of any box on hover, clockwise and opposite each other.
@@ -177,7 +177,7 @@ a:hover { color: var(--teal); }
 :is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card)::before,
 :is(.card, .contact-card, .activity-card, .cert-group, .placeholder, .lang-pie-card)::after {
   content: ""; position: absolute; top: 0; left: 0; width: 6px; height: 6px; border-radius: 50%;
-  background: var(--border); box-shadow: 0 0 8px 1px var(--border);
+  background: var(--orbit-color, var(--border)); box-shadow: 0 0 8px 1px var(--orbit-color, var(--border));   /* --orbit-color is set per box: project cards (their main language) and the language pie (the average colour) */
   offset-path: inset(0); offset-rotate: 0deg; offset-distance: 0%;
   opacity: 0; pointer-events: none; transition: opacity .35s var(--ease);
 }
