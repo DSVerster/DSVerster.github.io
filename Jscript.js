@@ -404,11 +404,28 @@ const DATA = {
   const spanName = (cfg, n) => cfg.step === 1 ? (n === 1 ? "day" : `${n} days`) : cfg.step === 7 ? (n === 1 ? "week" : `${n} weeks`) : `${n * cfg.step} days`;
   const rangeBar = () => `<div class="range-bar" role="group" aria-label="Time range">${DATA.activity.ranges.map((r, i) => `<button class="range-btn${i === state.range ? " active" : ""}" data-range="${i}" aria-pressed="${i === state.range}">${esc(r.label)}</button>`).join("")}</div>`;
 
+  /* ---------- Loading bar for the activity graph: it follows the real steps the graph waits for ----------
+     LOAD_WEIGHTS = how much of the bar each step is worth (the weights are added up and scaled to 100%):
+     snapshot = the data file, repos = the repository list, commits = reading the commits (one share per repository), chart = drawing it. */
+  const LOAD_WEIGHTS = { snapshot: 10, repos: 20, commits: 60, chart: 10 };
+  const loadProg = { snapshot: 0, repos: 0, commits: 0, chart: 0, label: "Loading repositories" };
+  const loadPct = () => {
+    const w = LOAD_WEIGHTS, sum = w.snapshot + w.repos + w.commits + w.chart;
+    return Math.round(Math.min(1, (w.snapshot * loadProg.snapshot + w.repos * loadProg.repos + w.commits * loadProg.commits + w.chart * loadProg.chart) / sum) * 100);
+  };
+  const loadBarHtml = () => { const p = loadPct(); return `<div class="load-wrap"><p class="meta" id="loadLabel">${esc(loadProg.label)} &middot; ${p}%</p><div class="load-bar" id="loadBar" role="progressbar" aria-label="Loading the activity graph" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p}"><i style="width:${p}%"></i></div></div>`; };
+  /* Records a finished step and moves the bar in place (the page is not redrawn) */
+  const setLoad = (part, label) => {
+    Object.assign(loadProg, part); if (label) loadProg.label = label;
+    const bar = $("#loadBar"), text = $("#loadLabel"); if (!bar || !text) return;
+    const p = loadPct(); bar.setAttribute("aria-valuenow", p); bar.firstElementChild.style.width = p + "%"; text.innerHTML = `${esc(loadProg.label)} &middot; ${p}%`;
+  };
+
   const activityHtml = () => {
     const a = state.activity, cfg = DATA.activity.ranges[state.range] || DATA.activity.ranges[0];
     const sub = `<p class="meta">Last ${esc(cfg.label)} &middot; one point per ${spanName(cfg, 1)}, labelled every ${spanName(cfg, cfg.labelEvery)}</p>`;
     let body;
-    if (a.status === "loading") body = a.lastChart ? `<div class="is-loading">${a.lastChart}</div>` : `<p class="placeholder">Loading activity&hellip;</p>`;
+    if (a.status === "loading") body = loadBarHtml() + (a.lastChart ? `<div class="is-loading">${a.lastChart}</div>` : "");
     else if (a.status === "error") body = `<p class="placeholder">My activity could not be loaded at this time. Please view it directly on <a href="https://github.com/${DATA.githubUser}" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>`;
     else body = a.chart;
     return sub + body + invZone() + rangeBar();
@@ -423,12 +440,15 @@ const DATA = {
   const SHIP = ["......X......", ".....XXX.....", ".XXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX"];
   const PX = 4, SHIP_W = SHIP[0].length * PX, SHIP_H = SHIP.length * PX;          /* the sprite: 13 x 6 blocks of 4 pixels */
   const TILE = 10, SHIP_SPEED = 300, BULLET_SPEED = 560, FIRE_DELAY = 0.24;       /* tile size (px), ship speed (px/s), bullet speed (px/s), seconds between shots */
+  /* The cheat code: up, up, down, down multiplies the fire rate by CHEAT_RATE (enter it again to switch it off) */
+  const CHEAT = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown"], CHEAT_RATE = 2;
   /* The end of the game: once INV_DOOM per cent is destroyed the page glitches for DOOM_GLITCH seconds, a fake blue screen follows for DOOM_BSOD seconds, and the page reloads */
   const INV_DOOM = 88, DOOM_GLITCH = 3.5, DOOM_BSOD = 5;
   const INV_HINT = "&larr; &rarr; move &middot; &uarr; shoot";
-  const invZone = () => DATA.activity.invaders === false ? "" : `<div class="invader-zone" id="invader" aria-hidden="true"><span class="invader-hint">${INV_HINT}</span></div>`;
+  const invZone = () => DATA.activity.invaders === false ? "" : `<div class="invader-zone" id="invader" aria-hidden="true"><span class="invader-hint">${INV_HINT}${rapidNote()}</span></div>`;
+  const rapidNote = () => inv.rapid ? ` &middot; rapid fire &times;${CHEAT_RATE}` : "";
   const inv = { card: null, cv: null, ctx: null, scar: null, sctx: null, ro: null, raf: 0, last: 0, dpr: 1, g: null, col: null, ratio: null, x: 0, cool: 0,
-    held: { l: false, r: false, u: false }, bullets: [], parts: [], dead: new Set(), content: new Set(), hit: 0, started: false, pct: -1, doom: false };
+    held: { l: false, r: false, u: false }, bullets: [], parts: [], dead: new Set(), content: new Set(), hit: 0, started: false, pct: -1, doom: false, rapid: false, codeKeys: [] };
   const tileKey = (c, r) => r * 4096 + c;
   const invShipY = () => Math.max(inv.g.zy, inv.g.zy + inv.g.zh - SHIP_H - 6);
 
@@ -485,7 +505,7 @@ const DATA = {
     const h = $("#invader .invader-hint");
     if (!h || !inv.started) return;
     const pct = inv.content.size ? Math.min(100, Math.round(inv.hit / inv.content.size * 100)) : 0;
-    if (pct !== inv.pct) { inv.pct = pct; h.innerHTML = `${pct}% destroyed &middot; R restores`; }
+    if (pct !== inv.pct) { inv.pct = pct; h.innerHTML = `${pct}% destroyed &middot; R restores${rapidNote()}`; }
   }
 
   /* A shot flies upwards in small steps (so it cannot jump over anything) and explodes on the first tile of text or graph that is still there */
@@ -519,8 +539,8 @@ const DATA = {
     const g = inv.g, dir = (inv.held.r ? 1 : 0) - (inv.held.l ? 1 : 0);
     if (dir) { inv.x = Math.max(6, Math.min(g.cw - SHIP_W - 6, inv.x + dir * SHIP_SPEED * dt)); inv.ratio = inv.x / Math.max(1, g.cw - SHIP_W); }
     inv.cool -= dt;
-    if (inv.held.u && inv.cool <= 0 && inv.bullets.length < 8) {
-      inv.bullets.push({ x: inv.x + SHIP_W / 2, y: invShipY() - 10 }); inv.cool = FIRE_DELAY;
+    if (inv.held.u && inv.cool <= 0 && inv.bullets.length < (inv.rapid ? 8 * CHEAT_RATE : 8)) {
+      inv.bullets.push({ x: inv.x + SHIP_W / 2, y: invShipY() - 10 }); inv.cool = FIRE_DELAY / (inv.rapid ? CHEAT_RATE : 1);
       if (!inv.started) { inv.started = true; invHint(); }                         /* the game starts with the first shot */
     }
     inv.bullets = inv.bullets.filter(b => invMoveBullet(b, BULLET_SPEED * dt));
@@ -533,7 +553,7 @@ const DATA = {
   function invReset() {
     inv.dead.clear(); inv.bullets = []; inv.parts = []; inv.hit = 0; inv.started = false; inv.pct = -1; inv.cool = 0;
     if (inv.sctx && inv.g) inv.sctx.clearRect(0, 0, inv.g.cw, inv.g.ch);
-    const h = $("#invader .invader-hint"); if (h) h.innerHTML = INV_HINT;
+    const h = $("#invader .invader-hint"); if (h) h.innerHTML = INV_HINT + rapidNote();
     invDraw();
   }
 
@@ -605,12 +625,27 @@ const DATA = {
     const r = z.getBoundingClientRect(), pr = p.getBoundingClientRect();
     return r.width > 0 && r.top >= pr.top && r.bottom <= pr.bottom;
   };
+  /* Follows the cheat code. It is recognised even after extra key presses (up, up, up, down, down still works).
+     Returns true when the latest keys form the start of the code, so a Down that belongs to it is not used for scrolling. */
+  function invCode(k) {
+    const keys = inv.codeKeys; keys.push(k); if (keys.length > CHEAT.length) keys.shift();
+    let n = 0;                                                                   /* how much of the code the latest keys already form */
+    for (let m = keys.length; m > 0; m--) if (keys.slice(-m).every((x, i) => x === CHEAT[i])) { n = m; break; }
+    if (n === CHEAT.length) {
+      keys.length = 0; inv.rapid = !inv.rapid; inv.pct = -1;
+      if (inv.started) invHint(); else { const h = $("#invader .invader-hint"); if (h) h.innerHTML = INV_HINT + rapidNote(); }
+    }
+    return n > 0;
+  }
   document.addEventListener("keydown", ev => {
     const k = ev.key;
     if (inv.doom) { if (k.startsWith("Arrow") || k === " ") ev.preventDefault(); return; }   /* the game is over */
-    if (!inv.card || ev.ctrlKey || ev.metaKey || ev.altKey || (k !== "ArrowLeft" && k !== "ArrowRight" && k !== "ArrowUp" && k !== "r" && k !== "R")) return;
+    if (!inv.card || ev.ctrlKey || ev.metaKey || ev.altKey) return;
     const t = ev.target; if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
-    if (!invLive()) return;
+    if (!invLive()) { inv.codeKeys.length = 0; return; }
+    const part = ev.repeat || k === "Shift" ? false : invCode(k);                              /* the cheat code: up, up, down, down */
+    if (k !== "ArrowLeft" && k !== "ArrowRight" && k !== "ArrowUp" && k !== "ArrowDown" && k !== "r" && k !== "R") return;
+    if (k === "ArrowDown") { if (part) ev.preventDefault(); return; }                          /* down only belongs to the game while the code is entered; otherwise it scrolls as usual */
     if (k === "r" || k === "R") { if (!ev.repeat) invReset(); return; }
     ev.preventDefault();
     if (k === "ArrowLeft") inv.held.l = true; else if (k === "ArrowRight") inv.held.r = true; else inv.held.u = true;
@@ -624,7 +659,7 @@ const DATA = {
     if (state.reposStatus !== "ok") throw new Error("Repositories unavailable");
     days = Math.max(2, Math.min(730, days));
     const cacheKey = "dsv-commits-v3:" + days;
-    const cached = cacheGet(cacheKey); if (cached) return cached;
+    const cached = cacheGet(cacheKey); if (cached) { setLoad({ commits: 1 }, "Drawing the graph"); return cached; }
     const since = addDays(new Date(tzKey(new Date()) + "T00:00:00Z"), -days).toISOString(); /* a day of margin; the buckets do the exact cut */
     const snap = state.snapshot, live = state.source === "live";
     const snapCovers = !!snap && (snap.days || 0) >= days;   /* an older snapshot may not reach back far enough for the longer ranges */
@@ -643,10 +678,15 @@ const DATA = {
       return out;
     };
     const active = state.rawRepos.filter(r => new Date(r.pushed_at) >= new Date(since));
+    let finished = 0;
+    const repoWord = n => plural(n, "repository", "repositories");
+    setLoad({ commits: active.length ? 0 : 1 }, active.length ? `Reading commits (0 of ${repoWord(active.length)})` : "Drawing the graph");
     const results = await Promise.allSettled(active.map(async r => {
-      if (snapCovers && snapCurrent(r)) return snapCommits(r.name);    /* the snapshot already holds everything up to the latest push */
-      try { return await liveCommits(r); }
-      catch (e) { if (snapRepo(r.name)) return snapCommits(r.name); throw e; }
+      try {
+        if (snapCovers && snapCurrent(r)) return snapCommits(r.name);    /* the snapshot already holds everything up to the latest push */
+        try { return await liveCommits(r); }
+        catch (e) { if (snapRepo(r.name)) return snapCommits(r.name); throw e; }
+      } finally { finished++; setLoad({ commits: finished / active.length }, finished < active.length ? `Reading commits (${finished} of ${repoWord(active.length)})` : "Drawing the graph"); }
     }));
     if (active.length && results.every(x => x.status === "rejected")) {
       let saved = null; try { saved = JSON.parse(localStorage.getItem("dsv-commits-saved:" + days)); } catch (e) { /* none */ }
@@ -1033,6 +1073,7 @@ const DATA = {
         .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
         .then(repos => { cacheSet("dsv-repos-v2", repos); try { localStorage.setItem("dsv-repos-saved", JSON.stringify(repos)); } catch (e) { /* storage unavailable */ } return repos; });
   const loadRepos = fresh => fetchSnapshot().then(snap => {
+    setLoad({ snapshot: 1 }, "Loading repositories");
     state.snapshot = snap; state.source = "live";
     return liveRepos(fresh).catch(err => {
       console.warn("Live GitHub data unavailable:", err);
@@ -1058,6 +1099,7 @@ const DATA = {
       state.repos = repos.filter(r => !r.fork && (DATA.showPortfolioRepo || r.name.toLowerCase() !== `${DATA.githubUser.toLowerCase()}.github.io`))
         .sort((a, b) => new Date(b.pushed_at) - new Date(a.pushed_at));
       state.reposStatus = "ok";
+      setLoad({ repos: 1 }, "Reading commits");
       state.repos.forEach(r => { const l = snapCurrent(r) && snapLangs(r.name); if (l) state.langs[r.name] = l; });   /* no flash: the full bars are there on the first draw */
       const saved = state.snapshot && new Date(state.snapshot.generatedAt).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: DATA.timezone });
       const note = state.source === "snapshot" ? ` (live GitHub unavailable; data saved ${saved})` : state.source === "saved" ? " (live GitHub unavailable; saved copy)" : "";
@@ -1108,9 +1150,11 @@ const DATA = {
   function loadRange() {
     const cfg = DATA.activity.ranges[state.range] || DATA.activity.ranges[0], token = ++rangeToken;
     state.activity = { status: "loading", buckets: [], lastChart: state.activity.chart || state.activity.lastChart || "" };
+    Object.assign(loadProg, { snapshot: state.reposStatus === "loading" ? loadProg.snapshot : 1, repos: state.reposStatus === "ok" ? 1 : 0, commits: 0, chart: 0,
+      label: state.reposStatus === "ok" ? "Reading commits" : "Loading repositories" });   /* the steps already finished stay finished */
     refreshActivity();
     reposDone.then(() => loadActivity(cfg.days))
-      .then(r => { if (token !== rangeToken) return; const b = buildBuckets(r.data, cfg); state.activity = { status: "ok", buckets: b, fetchedAt: r.t, chart: chartSvg(b, r.t) }; })
+      .then(r => { if (token !== rangeToken) return; setLoad({ commits: 1 }, "Drawing the graph"); const b = buildBuckets(r.data, cfg); state.activity = { status: "ok", buckets: b, fetchedAt: r.t, chart: chartSvg(b, r.t) }; setLoad({ chart: 1 }); return new Promise(done => setTimeout(done, 300)); })   /* a moment at 100%, so the bar visibly finishes */
       .catch(err => { if (token !== rangeToken) return; console.error("Activity data error:", err); state.activity = { status: "error", buckets: [] }; })
       .finally(() => { if (token === rangeToken) refreshActivity(); });
   }

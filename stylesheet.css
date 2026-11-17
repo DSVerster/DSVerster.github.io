@@ -402,3 +402,11 @@ body.doom-glitch .titlebar, body.doom-glitch .workbench, body.doom-glitch .statu
 .doom-bsod .info p { margin: 0 0 .5em; font-size: .72em; }
 .doom-qr { flex: none; width: 104px; height: 104px; background: #fff; }
 @media (prefers-reduced-motion: reduce) { .doom-title, body.doom-glitch .titlebar, body.doom-glitch .workbench, body.doom-glitch .status { animation: none; } }
+
+/* ==========================================================================
+   Loading bar for the activity graph (it follows the real loading steps)
+   ========================================================================== */
+.load-wrap { margin: 8px 0 6px; }
+.load-wrap .meta { margin: 0 0 6px; max-width: none; text-align: left; }
+.load-bar { height: 8px; overflow: hidden; border-radius: 4px; background: var(--soft); }
+.load-bar i { display: block; height: 100%; width: 0; background: var(--teal); transition: width .3s var(--ease); }
