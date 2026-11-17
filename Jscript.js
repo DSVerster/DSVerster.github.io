@@ -418,13 +418,17 @@ const DATA = {
      The ship is ready as soon as the box is drawn. Left and right arrows move it, the up arrow shoots (and starts the game), and every shot
      erodes the text and graph above, tile by tile. R restores everything, and so does switching the time range. It is only a drawing laid over
      the box: the real text and graph underneath are never changed, so screen readers and copying are unaffected. */
+  /* THE PLAYER: redraw it here. X is a block and . is empty; keep every row the same length and use about 12 rows or fewer.
+     The size, movement and shooting adjust to whatever is drawn. */
   const SHIP = ["......X......", ".....XXX.....", ".XXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX"];
   const PX = 4, SHIP_W = SHIP[0].length * PX, SHIP_H = SHIP.length * PX;          /* the sprite: 13 x 6 blocks of 4 pixels */
   const TILE = 10, SHIP_SPEED = 300, BULLET_SPEED = 560, FIRE_DELAY = 0.24;       /* tile size (px), ship speed (px/s), bullet speed (px/s), seconds between shots */
+  /* The end of the game: once INV_DOOM per cent is destroyed the page glitches for DOOM_GLITCH seconds, a fake blue screen follows for DOOM_BSOD seconds, and the page reloads */
+  const INV_DOOM = 88, DOOM_GLITCH = 3.5, DOOM_BSOD = 5;
   const INV_HINT = "&larr; &rarr; move &middot; &uarr; shoot";
   const invZone = () => DATA.activity.invaders === false ? "" : `<div class="invader-zone" id="invader" aria-hidden="true"><span class="invader-hint">${INV_HINT}</span></div>`;
   const inv = { card: null, cv: null, ctx: null, scar: null, sctx: null, ro: null, raf: 0, last: 0, dpr: 1, g: null, col: null, ratio: null, x: 0, cool: 0,
-    held: { l: false, r: false, u: false }, bullets: [], parts: [], dead: new Set(), content: new Set(), hit: 0, started: false, pct: -1 };
+    held: { l: false, r: false, u: false }, bullets: [], parts: [], dead: new Set(), content: new Set(), hit: 0, started: false, pct: -1, doom: false };
   const tileKey = (c, r) => r * 4096 + c;
   const invShipY = () => Math.max(inv.g.zy, inv.g.zy + inv.g.zh - SHIP_H - 6);
 
@@ -504,10 +508,12 @@ const DATA = {
     }
     if (!matchMedia("(prefers-reduced-motion: reduce)").matches) for (let i = 0; i < 12; i++) inv.parts.push({ x, y, vx: (Math.random() - .5) * 220, vy: -Math.random() * 160, life: .5, max: .5, color: inv.col.spark[i % inv.col.spark.length] });
     invHint();
+    if (!inv.doom && inv.content.size && inv.hit / inv.content.size >= INV_DOOM / 100) invDoom();
   }
 
   function invTick(ts) {
     inv.raf = 0;
+    if (inv.doom) return;
     if (!inv.card || !inv.card.isConnected || !inv.g) return;
     const dt = Math.min(0.05, (ts - (inv.last || ts)) / 1000); inv.last = ts;
     const g = inv.g, dir = (inv.held.r ? 1 : 0) - (inv.held.l ? 1 : 0);
@@ -522,13 +528,56 @@ const DATA = {
     invDraw();
     if (dir || inv.held.u || inv.bullets.length || inv.parts.length) inv.raf = requestAnimationFrame(invTick); else inv.last = 0;   /* idle: no animation running */
   }
-  const invWake = () => { if (!inv.raf && inv.card && inv.g) { inv.last = 0; inv.raf = requestAnimationFrame(invTick); } };
+  const invWake = () => { if (!inv.raf && inv.card && inv.g && !inv.doom) { inv.last = 0; inv.raf = requestAnimationFrame(invTick); } };
 
   function invReset() {
     inv.dead.clear(); inv.bullets = []; inv.parts = []; inv.hit = 0; inv.started = false; inv.pct = -1; inv.cool = 0;
     if (inv.sctx && inv.g) inv.sctx.clearRect(0, 0, inv.g.cw, inv.g.ch);
     const h = $("#invader .invader-hint"); if (h) h.innerHTML = INV_HINT;
     invDraw();
+  }
+
+  /* ---------- The end of the game: glitch, "Invaders!", a fake blue screen, then a full reload with everything reset ---------- */
+  const fakeQr = () => {
+    const n = 21, cells = [];
+    const inFinder = (x, y) => (x < 8 && y < 8) || (x > n - 9 && y < 8) || (x < 8 && y > n - 9);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (!inFinder(x, y) && Math.random() < 0.5) cells.push(`<rect x="${x}" y="${y}" width="1" height="1"/>`);
+    const finder = (x, y) => `<rect x="${x}.5" y="${y}.5" width="6" height="6" fill="none" stroke="#0078d7" stroke-width="1"/><rect x="${x + 2}" y="${y + 2}" width="3" height="3"/>`;
+    return `<svg class="doom-qr" viewBox="-2 -2 ${n + 4} ${n + 4}" fill="#0078d7" aria-hidden="true">${cells.join("")}${finder(0, 0)}${finder(n - 7, 0)}${finder(0, n - 7)}</svg>`;
+  };
+  /* Thin coloured bars that tear across the screen, moved again every fraction of a second */
+  function doomTears(box) {
+    box.innerHTML = Array.from({ length: 7 }, (_, i) => `<i style="top:${(Math.random() * 96).toFixed(1)}%;left:${(Math.random() * 25).toFixed(1)}%;width:${(55 + Math.random() * 45).toFixed(1)}%;height:${(0.6 + Math.random() * 2.2).toFixed(1)}%;background:${["#ff2a6d", "#05d9e8", "#f9f871"][i % 3]};transform:translateX(${((Math.random() - .5) * 40).toFixed(0)}px)"></i>`).join("");
+  }
+  function doomBlueScreen(box) {
+    box.className = "bsod";
+    box.innerHTML = `<span class="sr">The page has been overrun and is restarting.</span>
+      <div class="doom-bsod" aria-hidden="true"><div class="face">:(</div>
+        <p>Your portfolio ran into a problem and needs to restart. We&rsquo;re just collecting some error info, and then we&rsquo;ll restart for you.</p>
+        <p class="pct"><span id="doomPct">0</span>% complete</p>
+        <div class="info">${fakeQr()}<div><p>For more information about this issue and possible fixes, visit the nearest arcade.</p>
+          <p>If you call a support person, give them this info:<br>Stop code: INVADERS_DESTROYED_THE_PAGE<br>What failed: Jscript.js</p></div></div></div>`;
+    const pct = box.querySelector("#doomPct"), t0 = Date.now();
+    const timer = setInterval(() => { pct.textContent = Math.min(100, Math.floor((Date.now() - t0) / (DOOM_BSOD * 10))); }, 100);
+    setTimeout(() => { clearInterval(timer); location.reload(); }, DOOM_BSOD * 1000);   /* a full reload: the graph is restored and the ship is centred again */
+  }
+  function invDoom() {
+    if (inv.doom) return;
+    inv.doom = true; inv.held.l = inv.held.r = inv.held.u = false;
+    if (inv.raf) { cancelAnimationFrame(inv.raf); inv.raf = 0; }
+    const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;           /* no glitching or flashing for visitors who ask for less motion */
+    const box = document.createElement("div");
+    box.id = "doom"; box.setAttribute("role", "alert");
+    box.innerHTML = `<span class="sr">The page has been overrun and will restart in a few seconds.</span>` + (calm ? "" :
+      `<div class="doom-dim" aria-hidden="true"></div><div class="doom-title" aria-hidden="true"><span>Invaders!</span></div><div class="doom-tears" aria-hidden="true"></div><div class="doom-scan" aria-hidden="true"></div>`);
+    document.body.appendChild(box);
+    if (document.fonts && document.fonts.load) document.fonts.load('italic 900 40px "Back to the Future"').catch(() => {});
+    let tears = 0;
+    if (!calm) {
+      const t = box.querySelector(".doom-tears");
+      document.body.classList.add("doom-glitch"); doomTears(t); tears = setInterval(() => doomTears(t), 140);
+    }
+    setTimeout(() => { clearInterval(tears); document.body.classList.remove("doom-glitch"); doomBlueScreen(box); }, calm ? 0 : DOOM_GLITCH * 1000);
   }
 
   /* Called whenever the activity box has been drawn (or redrawn with new data, which also restores the text and graph) */
@@ -558,6 +607,7 @@ const DATA = {
   };
   document.addEventListener("keydown", ev => {
     const k = ev.key;
+    if (inv.doom) { if (k.startsWith("Arrow") || k === " ") ev.preventDefault(); return; }   /* the game is over */
     if (!inv.card || ev.ctrlKey || ev.metaKey || ev.altKey || (k !== "ArrowLeft" && k !== "ArrowRight" && k !== "ArrowUp" && k !== "r" && k !== "R")) return;
     const t = ev.target; if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
     if (!invLive()) return;

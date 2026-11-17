@@ -173,6 +173,7 @@ a:hover { color: var(--teal); }
   --power-in: .45s;                /* fade-in time */
   --power-hold: .1s;               /* time it stays fully visible */
   --power-out: .45s;               /* fade-out time */
+  --doom-flash: .5s;               /* the "Invaders!" text flashes once per this time at the end of the game (keep it above .34s: three flashes a second is the safe limit) */
   --power-color: var(--fg);        /* colour of the power symbol: fixed, whatever the orbit colours are (for example #ffffff or #4ec9b0) */
 }
 
@@ -358,3 +359,46 @@ a:hover { color: var(--teal); }
 .invader-zone { flex: 1 1 auto; min-height: 56px; position: relative; }
 .invader-hint { position: absolute; left: 0; right: 0; top: 6px; text-align: center; font: 12px var(--mono); color: var(--dim); pointer-events: none; user-select: none; }
 .invader-canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* ==========================================================================
+   The end of the space invader game: the page glitches with "Invaders!" flashing behind it, then a fake blue screen
+   ========================================================================== */
+/* The real Back to the Future lettering is a licensed typeface that is not bundled here. If you have a copy you may use, save it as
+   media/BackToTheFuture.woff2 (or .ttf) and it is picked up automatically; otherwise the bold italic stand-in below is used. */
+@font-face { font-family: "Back to the Future"; src: local("Back to the Future"), local("BackToTheFuture"), url("media/BackToTheFuture.woff2") format("woff2"), url("media/BackToTheFuture.ttf") format("truetype"); font-display: swap; }
+#doom { position: fixed; inset: 0; z-index: 9999; overflow: hidden; }
+.doom-dim { position: absolute; inset: 0; background: rgba(0, 0, 0, .45); }
+.doom-title { position: absolute; inset: 0; display: grid; place-items: center; padding: 0 4vw; text-align: center; animation: doom-flash var(--doom-flash) steps(1, end) infinite; }
+.doom-title span { display: inline-block; font-family: "Back to the Future", "ITC Avant Garde Gothic", "Century Gothic", "Avant Garde", "Arial Black", Impact, sans-serif; font-style: italic; font-weight: 900; font-size: clamp(3.5rem, 15vw, 12rem); line-height: 1.1; letter-spacing: .02em;
+  background: linear-gradient(180deg, #fff 0%, #ffe3b0 36%, #ff8a1f 52%, #d1210f 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; -webkit-text-stroke: 3px #7a0b05;
+  filter: drop-shadow(0 0 18px rgba(255, 90, 20, .65)) drop-shadow(5px 0 0 rgba(0, 230, 255, .5)) drop-shadow(-5px 0 0 rgba(255, 0, 70, .5)); }
+.doom-title span { position: relative; }
+.doom-title span::before, .doom-title span::after { content: ""; position: absolute; height: .05em; border-radius: 0 .03em .03em 0; background: linear-gradient(90deg, rgba(255, 138, 31, 0), #ff8a1f 35%, #ffe3b0); }
+.doom-title span::before { left: -12%; width: 44%; bottom: .02em; }      /* two speed streaks trail under the lettering */
+.doom-title span::after { left: -24%; width: 60%; bottom: -.07em; }
+@keyframes doom-flash { 0% { opacity: 1; } 55% { opacity: .08; } }
+.doom-tears i { position: absolute; mix-blend-mode: screen; opacity: .4; }
+.doom-scan { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .28) 0 1px, transparent 1px 3px); }
+/* The page itself jolts and splits into red and cyan, in steps (movement and colour only, no full-screen strobing) */
+body.doom-glitch .titlebar, body.doom-glitch .workbench, body.doom-glitch .status { animation: doom-jolt 1.1s steps(1, end) infinite; }
+@keyframes doom-jolt {
+  0%  { transform: none; filter: none; }
+  9%  { transform: translate(-9px, 2px) skewX(2deg); filter: hue-rotate(70deg) saturate(1.8); }
+  18% { transform: translate(7px, -3px); filter: drop-shadow(5px 0 0 rgba(255, 0, 70, .8)) drop-shadow(-5px 0 0 rgba(0, 225, 255, .8)); }
+  31% { transform: translate(0, 4px) scaleY(1.02); filter: hue-rotate(-60deg); }
+  44% { transform: translate(-4px, 0) skewX(-3deg); filter: none; }
+  57% { transform: translate(11px, 1px); filter: drop-shadow(-6px 0 0 rgba(255, 0, 70, .8)) drop-shadow(6px 0 0 rgba(0, 225, 255, .8)); }
+  70% { transform: translate(-6px, -2px) skewX(1deg); filter: hue-rotate(120deg) saturate(2); }
+  83% { transform: translate(3px, 3px); filter: none; }
+  92% { transform: translate(-2px, 0); filter: drop-shadow(3px 0 0 rgba(255, 0, 70, .8)) drop-shadow(-3px 0 0 rgba(0, 225, 255, .8)); }
+}
+/* The fake blue screen of death */
+#doom.bsod { background: #0078d7; cursor: none; }
+.doom-bsod { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: clamp(24px, 9vw, 150px); color: #fff; font: 400 clamp(1rem, 1.7vw, 1.45rem)/1.5 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif; }
+.doom-bsod .face { margin: 0 0 .15em; font-size: clamp(5rem, 15vw, 10rem); line-height: 1; font-weight: 300; }
+.doom-bsod p { max-width: 38em; margin: 0 0 1em; }
+.doom-bsod .pct { font-size: 1.15em; }
+.doom-bsod .info { display: flex; gap: 22px; align-items: center; margin-top: 1.4em; }
+.doom-bsod .info p { margin: 0 0 .5em; font-size: .72em; }
+.doom-qr { flex: none; width: 104px; height: 104px; background: #fff; }
+@media (prefers-reduced-motion: reduce) { .doom-title, body.doom-glitch .titlebar, body.doom-glitch .workbench, body.doom-glitch .status { animation: none; } }
