@@ -85,9 +85,9 @@ a:hover { color: var(--teal); }
 .pane h2::before { content: "// "; color: var(--green); }
 .pane p, .pane li { max-width: 72ch; }
 .role { margin: 0 0 1rem; font-family: var(--mono); font-size: .95rem; color: var(--string); }
-.hero { display: flex; gap: clamp(16px, 4vw, 40px); align-items: center; flex-wrap: wrap; margin-top: 12px; }
-.hero img { width: clamp(120px, 22vw, 190px); aspect-ratio: 1; object-fit: cover; border-radius: 50%; border: 2px solid var(--border); }
-.hero > div { flex: 1; min-width: 240px; }
+.biped { display: flex; gap: clamp(16px, 4vw, 40px); align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.biped img { width: clamp(120px, 22vw, 190px); aspect-ratio: 1; object-fit: cover; border-radius: 50%; border: 2px solid var(--border); }
+.biped > div { flex: 1; min-width: 240px; }
 
 .btn { display: inline-block; margin: 6px 8px 0 0; padding: 8px 18px; border: 1px solid var(--border); background: none; color: var(--fg); text-decoration: none; font: inherit; font-size: 15.5px; cursor: pointer; transition: background .2s var(--ease), color .2s var(--ease); }
 .btn:hover { background: var(--border); color: #000; }
@@ -217,8 +217,8 @@ a:hover { color: var(--teal); }
 .node:hover .label { transform: translateX(3px); }
 .chips li { transition: border-color .2s var(--ease), color .2s var(--ease); }
 .chips li:hover { border-color: var(--border); color: var(--fn); }
-.hero img { transition: transform .4s var(--ease), border-color .3s var(--ease); }
-.hero img:hover { transform: scale(1.03); border-color: var(--teal); }
+.biped img { transition: transform .4s var(--ease), border-color .3s var(--ease); }
+.biped img:hover { transform: scale(1.03); border-color: var(--teal); }
 
 /* 4. Certificate groups open and close smoothly (progressive enhancement) */
 .cert-group::details-content { block-size: 0; overflow: hidden; transition: block-size .3s var(--ease), content-visibility .3s var(--ease) allow-discrete; }
@@ -410,3 +410,18 @@ body.doom-glitch .titlebar, body.doom-glitch .workbench, body.doom-glitch .statu
 .load-wrap .meta { margin: 0 0 6px; max-width: none; text-align: left; }
 .load-bar { height: 8px; overflow: hidden; border-radius: 4px; background: var(--soft); }
 .load-bar i { display: block; height: 100%; width: 0; background: var(--teal); transition: width .3s var(--ease); }
+
+/* ==========================================================================
+   Live clock on the portrait (UTC): hour = filled blue, minute = hollow blue, second = teal
+   ========================================================================== */
+.clock-wrap { position: relative; flex: none; width: clamp(120px, 22vw, 190px); aspect-ratio: 1; transition: transform .4s var(--ease); }
+.biped > .clock-wrap { flex: none; min-width: 0; }                  /* beats ".biped > div" */
+.clock-wrap:hover { transform: scale(1.03); }
+.biped .clock-wrap img { display: block; width: 100%; height: 100%; transform: none; }   /* block: an inline picture leaves a gap below it, which made the box taller than wide */
+.biped .clock-wrap img:hover { transform: none; }
+.orb { position: absolute; left: 50%; top: 0; width: 12px; height: 12px; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.orb-h { background: var(--border); box-shadow: 0 0 8px 1px var(--border); }
+.orb-m { border: 2px solid var(--border); background: transparent; box-shadow: 0 0 8px 1px var(--border); }
+.orb-s { z-index: 2; width: 8px; height: 8px; background: var(--teal); box-shadow: 0 0 8px 1px var(--teal); }
+.clock-time { position: absolute; left: 50%; bottom: 12%; transform: translateX(-50%); padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, .6);
+  color: var(--fg); font: 600 clamp(.6rem, 1.6vw, .8rem)/1.5 var(--mono); letter-spacing: .02em; white-space: nowrap; pointer-events: none; }

@@ -781,6 +781,33 @@ const DATA = {
     if (el) { el.innerHTML = statusHtml(); const c = statusOrbit(); if (c) el.style.setProperty("--orbit-color", c); else el.style.removeProperty("--orbit-color"); }
   }
 
+  /* ---------- Live clock on the portrait (UTC): hour = filled blue, minute = hollow blue, second = teal ----------
+     It ticks like a real clock: everything updates exactly on each whole second. The orbitals are placed in pixels from the picture's real
+     measured size, so each one sits exactly on the centre line of the photo's border (half the border's width inside the picture's edge). */
+  const clock = { timer: 0, ro: null };
+  function mountClock() {
+    clearTimeout(clock.timer); clock.timer = 0;
+    if (clock.ro) { clock.ro.disconnect(); clock.ro = null; }
+    const el = $("#clock"); if (!el) return;
+    const img = el.querySelector("img"), h = el.querySelector(".orb-h"), m = el.querySelector(".orb-m"), s = el.querySelector(".orb-s"), t = el.querySelector(".clock-time");
+    let f = [0, 0, 0];                                                            /* how far round the dial each orbital is (0 to 1) */
+    const place = () => {
+      const w = img.offsetWidth, ht = img.offsetHeight; if (!w || !ht) return;
+      const bw = parseFloat(getComputedStyle(img).borderTopWidth) || 0;
+      const cx = img.offsetLeft + w / 2, cy = img.offsetTop + ht / 2, rad = Math.min(w, ht) / 2 - bw / 2;
+      [h, m, s].forEach((o, i) => { const a = f[i] * 2 * Math.PI; o.style.left = (cx + rad * Math.sin(a)).toFixed(2) + "px"; o.style.top = (cy - rad * Math.cos(a)).toFixed(2) + "px"; });
+    };
+    const tick = () => {
+      if (!el.isConnected) { clock.timer = 0; return; }
+      const d = new Date(), sec = d.getUTCSeconds(), min = d.getUTCMinutes() + sec / 60, hr = (d.getUTCHours() % 12) + min / 60;
+      f = [hr / 12, min / 60, sec / 60]; place();
+      t.textContent = d.toISOString().slice(11, 19);
+      clock.timer = setTimeout(tick, 1000 - d.getUTCMilliseconds() + 5);          /* wake up just after the next whole second */
+    };
+    tick();
+    clock.ro = new ResizeObserver(place); clock.ro.observe(img);                  /* the picture changes size with the window, or when it finishes loading */
+  }
+
   /* ---------- Views ---------- */
   const entryDetail = (e, kind) => `
     <h1>${esc(e.title)}</h1>
@@ -859,7 +886,7 @@ const DATA = {
   const views = {
     about: () => `
       <div class="about-grid"><div class="about-intro">
-      <div class="hero"><img src="${esc(DATA.photo)}" alt="Portrait of ${esc(DATA.name)}">
+      <div class="biped"><div class="clock-wrap" id="clock" title="Live clock (UTC)"><img src="${esc(DATA.photo)}" alt="Portrait of ${esc(DATA.name)}"><i class="orb orb-h" aria-hidden="true"></i><i class="orb orb-m" aria-hidden="true"></i><i class="orb orb-s" aria-hidden="true"></i><span class="clock-time" aria-hidden="true">--:--:--</span></div>
         <div><h1>${esc(DATA.name)}</h1><p class="role">${esc(DATA.role)}</p>
         <a class="btn" href="${esc(DATA.cv)}" download>Download CV (PDF)</a>
         <button class="btn" data-scroll="contact-card">Contact me</button></div></div>
@@ -935,6 +962,7 @@ const DATA = {
     pane.style.animation = "none"; void pane.offsetWidth; pane.style.animation = "";
     pane.scrollTop = 0;
     mountInvaders();
+    mountClock();
     $("#crumbs").textContent = "portfolio > " + ((DATA.certificatesInEducation && state.active.split("/")[0] === "certificates") ? "education/" : "") .concat(state.active).replace(/\//g, " > ");
     renderTree();
     loadLanguages();
