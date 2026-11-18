@@ -64,7 +64,7 @@ A visitor's browser may only make 60 anonymous GitHub requests per hour, so the 
 
 ## GitHub availability
 
-A small box on the About page, beneath the "About me" text (its bottom edge lines up with the bottom edge of the activity graph box beside it), shows how often GitHub itself has had problems. It exists because everything on this site that comes from GitHub (projects, languages, activity) is only as available as GitHub is. Like the activity graph, it is hidden on portrait screens.
+A small box on the About page, beneath the "About me" text, shows how often GitHub itself has had problems. It exists because everything on this site that comes from GitHub (projects, languages, activity) is only as available as GitHub is. Like the activity graph, it is hidden on portrait screens.
 
 **What it shows.** One square per day for the last 90 days. The colour is the most serious incident that was open on that day: teal for none, yellow for minor, orange for major and red for critical. Hovering over a square gives the date, the number of incidents and the total time an incident was open. The line beneath the strip adds up that time over the whole period and gives it as a percentage.
 
